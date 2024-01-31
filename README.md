@@ -21,6 +21,10 @@ https://github.com/CodeWithOsvaldas/webscraping-playwright-flight-tickets/blob/m
 
 
 
+![image](https://github.com/KritikaA04/comppricing/assets/110152863/79574069-cf53-470f-8428-fc68fed6dce2)
+
+
+
 
 
 
