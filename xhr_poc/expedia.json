@@ -1,0 +1,22 @@
+{
+    "errors": [
+        {
+            "message": "Parse GraphQL failed.",
+            "locations": [
+                {
+                    "line": 1,
+                    "column": 58
+                }
+            ],
+            "extensions": {
+                "code": "GRAPHQL_PARSE_FAILED"
+            }
+        }
+    ],
+    "extensions": {
+        "trace": {
+            "Trace-ID": "ae45ed7e-42b6-4099-a349-a282f431f614",
+            "Message-ID": "00000000-0000-0000-1a94-a842b38ea47a"
+        }
+    }
+}
