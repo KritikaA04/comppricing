@@ -1,0 +1,128 @@
+[
+    {
+        "departureDate": "2024-02-12",
+        "searchDates": [
+            "2024-02-12"
+        ],
+        "offsetDays": -3,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-13",
+        "searchDates": [
+            "2024-02-13"
+        ],
+        "offsetDays": -2,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-14",
+        "searchDates": [
+            "2024-02-14"
+        ],
+        "offsetDays": -1,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-15",
+        "searchDates": [
+            "2024-02-15"
+        ],
+        "offsetDays": 0,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-16",
+        "searchDates": [
+            "2024-02-16"
+        ],
+        "offsetDays": 1,
+        "isCheapest": true,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5344,
+            "nanos": 350000000
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5345,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-17",
+        "searchDates": [
+            "2024-02-17"
+        ],
+        "offsetDays": 2,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5363,
+            "nanos": 0
+        }
+    },
+    {
+        "departureDate": "2024-02-18",
+        "searchDates": [
+            "2024-02-18"
+        ],
+        "offsetDays": 3,
+        "isCheapest": false,
+        "price": {
+            "currencyCode": "INR",
+            "units": 5839,
+            "nanos": 700000000
+        },
+        "priceRounded": {
+            "currencyCode": "INR",
+            "units": 5840,
+            "nanos": 0
+        }
+    }
+]
