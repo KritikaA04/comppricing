@@ -1,3 +1,5 @@
+# expedia file
+
 import json
 
 f = open('expedia2.json')
