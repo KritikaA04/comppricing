@@ -1,0 +1,32 @@
+function PaxSegment({ index, passenger, handleSegmentChange, ticketInfoSource, updateSelectedCoupon, transactionGuid, isCancelProceeded, flowTypeName, isViewMode }) {
+    return (
+        <div id={`traverone_${index}`} className={`${index === 0 ? 'show' : 'collapse'}`} aria-labelledby={`headingOne_${index}`} data-parent="#accordionExample" data-testid="ps-div">
+            <div className="card-body f12 pt-0 pb-1">
+                <table className="table no-border">
+                    <thead>
+                        <tr>
+                            <th width="2%"></th>
+                            {flowTypeName === "FUSIONFARE" ? <>
+                                <th width="15%">Booking#</th>
+                                <th width="16%">Segment</th>
+                            </>
+                                :
+                                <th width="31%">Segment</th>
+                            }
+                            <th width="18%">Depart On</th>
+                            <th width="18%">Airline</th>
+                            <th width="31%">Coupon Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {passenger.SegmentDetails?.map((Segment, sindex) =>
+                            <PaxSegmentLine key={`psl_${sindex}_${index}`} Segment={Segment} sindex={sindex} index={index} handleSegmentChange={handleSegmentChange} flowTypeName={flowTypeName}
+                                transactionGuid={transactionGuid} ticketInfoSource={ticketInfoSource} updateSelectedCoupon={updateSelectedCoupon} isCancelProceeded={isCancelProceeded} isViewMode={isViewMode} />
+                        )}
+                    </tbody>
+                </table>
+
+            </div>
+        </div>
+    );
+}
