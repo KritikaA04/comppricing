@@ -1,0 +1,123 @@
+import React, { Component } from "react";
+import { getDOBFormattedDate } from "../../../utils/dates";
+class PaxHeader extends Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      paxIndex: null
+    }
+  }
+}
+
+togglePanel = (index) => {
+  this.setState({
+    paxIndex: this.state.paxIndex === index ? null : index
+  });
+};
+
+function PaxHeader({
+  passenger,
+  handlePassengerChange,
+  index,
+  isCancelProceeded,
+  selectedChildTid,
+  isFusionFare,
+  isMultiTicket,
+  isViewMode
+}) {
+  if (!passenger) {
+    return null;
+  }
+  let ticketDetails;
+  let isChecked = passenger?.isChecked ?? !isFusionFare;
+  if (isFusionFare && selectedChildTid) {
+    const { fusionFarePaxSelection } = passenger;
+    if (fusionFarePaxSelection && fusionFarePaxSelection.length > 0) {
+      const selectedPaxInfo = fusionFarePaxSelection.find(
+        (x) => x?.childTid === selectedChildTid
+      );
+      isChecked = selectedPaxInfo?.isChecked;
+    }
+    ticketDetails = passenger.TicketDetails?.find(
+      (x) => x.ChildTID === selectedChildTid
+    );
+  } else {
+    ticketDetails = passenger.TicketDetails?.[0];
+  }
+
+  return (
+    <div className="card-header" id={`headingOne_${index}`}>
+      <div className="row text-dark no-gutters">
+        <div className="col-2">
+          {isViewMode != true && !isMultiTicket && (
+            <input
+              data-testid="ph-i"
+              id={`check_phlist_${index}`}
+              className="chk-callid"
+              type="checkbox"
+              disabled={isCancelProceeded}
+              onChange={(e) => {
+                handlePassengerChange(e, index);
+              }}
+              checked={isChecked}
+            />
+          )}
+          <label
+            htmlFor={`check_phlist_${index}`}
+            className="font-weight-bold chck-label"
+            data-testid="checkbox"
+          />
+          {index + 1}. {passenger.FirstName}
+        </div>
+        <div className="col-2">
+          <span className="float-left ">{passenger.MiddleName}</span>
+        </div>
+        <div className="col-2">{passenger.LastName}</div>
+        <div className="col-2 ">
+          {" "}
+          {passenger.PaxType} , {passenger.Gender}
+        </div>
+        <div className="col-2 text-left text-nowrap pl-3">
+          {/* {passenger.TicketedOn && <>
+                        <strong className="text-dark text-nowrap"> {getDOBFormattedDate(passenger.TicketedOn)} </strong>
+                        <i className="icon ic-info-empty hovertooltips"><div className="stopstolltip couple-tootips" >TKT #{passenger.TicketNumber ? passenger.TicketNumber : "Unable to fetch current ticket"}</div></i>
+                    </>
+                    } */}
+          {ticketDetails?.TicketedOn && (
+            <strong className="text-dark text-nowrap">
+              {getDOBFormattedDate(ticketDetails?.TicketedOn)}{ticketDetails.TicketedOnTimeZoneGDS && `(${ticketDetails.TicketedOnTimeZoneGDS})`}
+            </strong>
+          )}
+          {ticketDetails?.TicketedOn && (
+            <i className="icon ic-info-empty hovertooltips">
+              <div className="stopstolltip couple-tootips">
+                TKT #
+                {ticketDetails?.TicketNumber
+                  ? ticketDetails?.TicketNumber
+                  : "Unable to fetch current ticket"}
+              </div>
+            </i>
+          )}
+        </div>
+        <div className="col-2 text-right">
+          <a
+            className="btn-link collapse-a float-right pr-2"
+            data-toggle="collapse"
+            data-target={`#traverone_${index}`}
+            // aria-expanded={index === 0 ? "true" : "false"}
+            aria-expanded={this.state.paxIndex === index ? "true" : "false"}
+            aria-controls={`traverone_${index}`}
+            onClick={() => this.togglePanel(index)}
+          >
+            <i className={`icon p-1 ${this.state.paxIndex == index ? 'ic-triangles-u' : 'ic-triangles-d'}`}/>
+            {/* <i className="icon p-1 ic-triangles-d" /> */}
+            {/* <i className="icon p-1 ic-triangles-u" /> */}
+          </a>
+          <span className="status-Active">{ticketDetails?.TicketStatus}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default PaxHeader;
