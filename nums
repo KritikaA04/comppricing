@@ -1,0 +1,51 @@
+public async Task<SplitPnrResponse> SplitPNR(SplitPnrRequest splitPnrRequest, int userId)
+{
+    try
+    {
+        splitPnrRequest.UserID = userId;
+        splitPnrRequest.ApplicationID = (int)SystemUser.Oap_Canceltxn_Service;
+        var cancelTxnData = await _cancelTxnMongo.GetCancelTransactionResponse(splitPnrRequest.OapTransactionGuid);
+        if (cancelTxnData == null || cancelTxnData.TransactionID == 0)
+        {
+            return new SplitPnrResponse { IsSuccess = false, IsProceedAllowed = false, ErrorInfo = "Cannot find OapTransaction details in mongo" };
+        }
+        var res = await _changeExchangeApi.SplitPNR(splitPnrRequest, userId);
+        var splitTid = res?.SplittedTransactionIDs?.Find(I => I.IsSplitPNR)?.TransactionID ?? 0;
+        res.IsSuccess = string.IsNullOrEmpty(res.ErrorInfo) && string.IsNullOrEmpty(res.SupplierError) && res.SplittedTransactionIDs?.Count > 1 && splitTid > 0;
+        if (res.IsSuccess)
+        {
+            var createTasksRs = CreateTrxTaskForParent(userId, cancelTxnData.OAPTransactionID, splitPnrRequest.TransactionID);
+            var updateSplitInMongo = _cancelTxnMongo.UpdateSplitTid(splitPnrRequest.OapTransactionGuid, cancelTxnData, res, splitTid);
+            var oapTransactionRs = _oapTransactionRepository.GetByOapTransactionIdAsync(cancelTxnData.OAPTransactionID);
+            var splitTrnxRs = _oapCxlUtility.GetTransactionDetails(splitTid);
+            var paymentLineRs = _cancelTxnMongo.GetRefundDetails(splitPnrRequest.OapTransactionGuid);
+            await Task.WhenAll(createTasksRs, updateSplitInMongo, oapTransactionRs, splitTrnxRs, paymentLineRs);
+            var splitTrnx = await splitTrnxRs;
+            var paymentRs = _invoiceDataAPI.GetPayments(splitTrnx?.TransactionGUID.ToString(), splitTid, userId);
+            var oapTransaction = (await oapTransactionRs)?.FirstOrDefault();
+            oapTransaction.Transactionid = splitTid;
+            oapTransaction.Remarks += $"replaced with split parent {splitPnrRequest.TransactionID}";
+            oapTransaction.UpdatedOn = _oAPUtility.ConvertUtcToEstTime(DateTime.UtcNow);
+            var updateSplitTid = _oapTransactionRepository.UpdateAsync(oapTransaction);
+            await Task.WhenAll(updateSplitTid, paymentRs);
+            var splitPaxNames = string.Join(',', res?.SplittedTransactionIDs?.Find(I => I.IsSplitPNR)?.PaxDetails?.Select(pax => $"{pax?.FirstName} {pax?.LastName}") ?? new[] { "" } );
+            var comment = $"Cancel Transaction migrated to Child TID {splitTid} for pax {splitPaxNames}";
+            var comment2 = string.Join("<br/>", cancelTxnData?.TidComments);
+            await Task.WhenAll(
+                UpdatePaymentLines(await paymentRs, await paymentLineRs, splitTid, splitPnrRequest.OapTransactionGuid),
+                _oapCxlUtility.InsertTidComments(splitPnrRequest.TransactionID, userId, comment),
+                _oapCxlUtility.InsertTidComments(splitTid, userId, comment2)
+            );
+            res.SplitTransactionId = splitTid;
+            res.SplitTransactionGuid = splitTrnx?.TransactionGUID.ToString();
+        }
+        res.IsProceedAllowed = true;
+        _logger.LogInformation("SplitPaxTask : SplitPNR : tid-{splitPnrRequest?.TransactionID}, isSplitSuccess:{res?.IsSuccess} response:{JsonConvert.SerializeObject(res)}", splitPnrRequest?.TransactionID, res?.IsSuccess, JsonConvert.SerializeObject(res));
+        return res;
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "SplitPaxTask : SplitPNR : tid-{splitPnrRequest?.TransactionID}, Exception:- {ex.Message} , {ex.StackTrace}", splitPnrRequest?.TransactionID, ex.Message, ex.StackTrace);
+        return new SplitPnrResponse() { IsProceedAllowed = false, ErrorInfo = $"Internal server error {ex.StackTrace}" };
+    }
+}
