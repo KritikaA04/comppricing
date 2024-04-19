@@ -1,67 +1,246 @@
-public async Task<TestResponse> TestSplitPNR()
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Extensions.Logging;
+using Moq;
+using OAP.CancelTxn.Business.Helper.Interface;
+using OAP.CancelTxn.Business.SplitPax;
+using OAP.CancelTxn.DataAccess.Applications.ChangeExchange.Interface;
+using OAP.CancelTxn.DataAccess.Applications.Fintech.Interface;
+using OAP.CancelTxn.DataAccess.MongoDataAccess.Interface;
+using OAP.CancelTxn.Utility.OapUtility.Interface;
+using OAP.Infrastructure.DataAccess.Transaction;
+using OAP.Infrastructure.Utility;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using OAP.CancelTxn.Business.RRF.Interface;
+using OAP.CancelTxn.DataAccess.MongoDataAccess;
+using OAP.CancelTxn.Models.Request.SplitPnr;
+using OAP.CancelTxn.Models.MongoDBEntity;
+using OAP.CancelTxn.Models.Response.SplitPnr;
+using Autofac.Core;
+using OAP.CancelTxn.Utility.OapUtility;
+using OAP.Infrastructure.Model.DBEntity;
+using OAP.CancelTxn.DataAccess.Applications.Fintech;
+using OAP.Infrastructure.Model.Common;
+using OAP.Infrastructure.Model.DBEntity.Transaction;
+using OAP.CancelTxn.Business.Helper;
+using OAP.CancelTxn.Models.Common;
+
+namespace OAP.CancelTxn.Test.Business.SplitPax;
+
+[TestClass]
+
+public class SplitPaxTaskTest
 {
-    // Arrange (mocking dependencies)
-    var mockCancelTxnMongo = Substitute.For<ICancelTxnMongo>();
-    var mockChangeExchangeApi = Substitute.For<IChangeExchangeApi>();
-    var mockOapTransactionRepository = Substitute.For<IOapTransactionRepository>();
-    var mockOapCxlUtility = Substitute.For<IOapCxlUtility>();
-    var mockInvoiceDataAPI = Substitute.For<IInvoiceDataAPI>();
-    var mockOAPUtility = Substitute.For<IOAPUtility>();
-    var mockLogger = Substitute.For<ILogger>();
+    private readonly Mock<ILogger<SplitPaxTask>> _logger;
+    private readonly Mock<IChangeExchangeApi> _changeExchangeApi;
+    private readonly Mock<ICancelTxnMongoData> _cancelTxnMongo;
+    private readonly Mock<IOapCancelTransactionHelper> _oapCancelTransactionHelper;
+    private readonly Mock<IOapCxlUtility> _oapCxlUtility;
+    private readonly Mock<IOAPUtility> _oAPUtility;
+    private readonly Mock<IDTOAPTransactionRepository> _oapTransactionRepository;
+    private readonly Mock<IOapCancelTaskHelper> _oapCancelTaskHelper;
+    private readonly Mock<IInvoiceDataAPI> _invoiceDataAPI;
+    readonly SplitPaxTask splitPaxTask;
 
-    // Mock return values and behaviors as needed
-    mockCancelTxnMongo.GetCancelTransactionResponse(Arg.Any<string>())
-        .Returns(new CancelTransactionResponse { OAPTransactionID = 1, TransactionID = 2 });
-    mockChangeExchangeApi.SplitPNR(Arg.Any<SplitPnrRequest>(), Arg.Any<int>())
-        .Returns(new SplitPnrResponse {
-            IsSuccess = true,
-            SplittedTransactionIDs = new List<SplittedTransactionID> {
-                new SplittedTransactionID { IsSplitPNR = true, TransactionID = 3, PaxDetails = new List<PaxDetail> {
-                    new PaxDetail { FirstName = "John", LastName = "Doe" }
-                } }
+    public SplitPaxTaskTest()
+    {
+        _logger = new Mock<ILogger<SplitPaxTask>>();
+        _changeExchangeApi = new Mock<IChangeExchangeApi>();
+        _cancelTxnMongo = new Mock<ICancelTxnMongoData>();
+        _oapCancelTransactionHelper = new Mock<IOapCancelTransactionHelper>();
+        _oapCxlUtility = new Mock<IOapCxlUtility>();
+        _oAPUtility = new Mock<IOAPUtility>();
+        _oapTransactionRepository = new Mock<IDTOAPTransactionRepository>();
+        _oapCancelTaskHelper = new Mock<IOapCancelTaskHelper>();
+        _invoiceDataAPI = new Mock<IInvoiceDataAPI>();
+        splitPaxTask = new SplitPaxTask(
+            _logger.Object,
+            _changeExchangeApi.Object,
+            _cancelTxnMongo.Object,
+            _oapCancelTransactionHelper.Object,
+            _oapCxlUtility.Object,
+            _oAPUtility.Object,
+            _oapTransactionRepository.Object,
+            _oapCancelTaskHelper.Object,
+            _invoiceDataAPI.Object
+            );
+    }
+
+    [TestMethod]
+    public void SplitPNRTest()
+    {
+        var userId = 123;
+        SplitPnrRequest splitPnrRequest = new SplitPnrRequest { OapTransactionGuid = "abc", TransactionID= 3456 };
+        var cancelTransactionMongo = new CancelTransactionMongo { TransactionID = 0 };
+        var splitTidx = 234;
+        var taskdetails = new CancellationTaskDetails();
+
+        _cancelTxnMongo.Setup(x => x.GetCancelTransactionResponse(It.IsAny<string>())).ReturnsAsync((CancelTransactionMongo)null);
+        var result = splitPaxTask.SplitPNR(splitPnrRequest, userId);
+        Assert.IsNotNull(result);
+        var splitPnrResponse = new SplitPnrResponse { SplittedTransactionIDs = new List<SplittedTransactionId> { new SplittedTransactionId { IsSplitPNR = true, TransactionID = 789 }, new SplittedTransactionId { IsSplitPNR = true, TransactionID = 678 } } };
+        _changeExchangeApi.Setup(m => m.SplitPNR(splitPnrRequest, userId)).ReturnsAsync(splitPnrResponse);
+        //_oapTransactionRepository.Setup(x => x.GetByOapTransactionIdAsync(It.IsAny<int>())).ReturnsAsync(new DTOAPTransaction());
+        _cancelTxnMongo.Setup(x => x.GetCancelTransactionResponse(splitPnrRequest.OapTransactionGuid)).ReturnsAsync(new CancelTransactionMongo { OAPTransactionID=1234});
+        _oapCancelTaskHelper.Setup(x => x.CreateCancellationTask(taskdetails, userId)).ReturnsAsync(new DTOAPTaskDetails());
+        _oapCxlUtility.Setup(x => x.GetTransactionDetails(It.IsAny<int>())).ReturnsAsync(new DTTransaction());
+        _invoiceDataAPI.Setup(x => x.GetPayments(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>())).ReturnsAsync(new List<BillingPayment>());
+        _cancelTxnMongo.Setup(x => x.GetRefundDetails(It.IsAny<string>())).ReturnsAsync(new RefundDetails());
+
+        cancelTransactionMongo = new CancelTransactionMongo { TransactionID = 1, OAPTransactionID = 1001 };
+        _cancelTxnMongo.Setup(x => x.GetCancelTransactionResponse(It.IsAny<string>()))
+                          .ReturnsAsync(cancelTransactionMongo);
+        result = splitPaxTask.SplitPNR(splitPnrRequest, userId);
+        Assert.IsNotNull(result);
+    }
+}
+
+
+
+
+
+
+
+
+
+
+public class SplitPaxTask : ISplitPaxTask
+{
+    private readonly ILogger<SplitPaxTask> _logger;
+    private readonly IChangeExchangeApi _changeExchangeApi;
+    private readonly ICancelTxnMongoData _cancelTxnMongo;
+    private readonly IOapCancelTransactionHelper _oapCancelTransactionHelper;
+    private readonly IOapCxlUtility _oapCxlUtility;
+    private readonly IOAPUtility _oAPUtility;
+    private readonly IDTOAPTransactionRepository _oapTransactionRepository;
+    private readonly IOapCancelTaskHelper _oapCancelTaskHelper;
+    private readonly IInvoiceDataAPI _invoiceDataAPI;
+
+    public SplitPaxTask(ILogger<SplitPaxTask> logger, IChangeExchangeApi changeExchangeApi, ICancelTxnMongoData cancelTxnMongo, IOapCancelTransactionHelper oapCancelTransactionHelper, IOapCxlUtility oapCxlUtility, IOAPUtility oAPUtility, IDTOAPTransactionRepository oapTransactionRepository, IOapCancelTaskHelper oapCancelTaskHelper, IInvoiceDataAPI invoiceDataAPI)
+    {
+        _logger = logger;
+        _changeExchangeApi = changeExchangeApi;
+        _cancelTxnMongo = cancelTxnMongo;
+        _oapCancelTransactionHelper = oapCancelTransactionHelper;
+        _oapCxlUtility = oapCxlUtility;
+        _oAPUtility = oAPUtility;
+        _oapTransactionRepository = oapTransactionRepository;
+        _oapCancelTaskHelper = oapCancelTaskHelper;
+        _invoiceDataAPI = invoiceDataAPI;
+    }
+
+    public async Task<SplitPnrResponse> SplitPNR(SplitPnrRequest splitPnrRequest, int userId)
+    {
+        try
+        {
+            splitPnrRequest.UserID = userId;
+            splitPnrRequest.ApplicationID = (int)SystemUser.Oap_Canceltxn_Service;
+            var cancelTxnData = await _cancelTxnMongo.GetCancelTransactionResponse(splitPnrRequest.OapTransactionGuid);
+            if (cancelTxnData == null || cancelTxnData.TransactionID == 0)
+            {
+                return new SplitPnrResponse { IsSuccess = false, IsProceedAllowed = false, ErrorInfo = "Cannot find OapTransaction details in mongo" };
             }
+            var res = await _changeExchangeApi.SplitPNR(splitPnrRequest, userId);
+            var splitTid = res?.SplittedTransactionIDs?.Find(I => I.IsSplitPNR)?.TransactionID ?? 0;
+            res.IsSuccess = string.IsNullOrEmpty(res.ErrorInfo) && string.IsNullOrEmpty(res.SupplierError) && res.SplittedTransactionIDs?.Count > 1 && splitTid > 0;
+            if (res.IsSuccess)
+            {
+                var createTasksRs = CreateTrxTaskForParent(userId, cancelTxnData.OAPTransactionID, splitPnrRequest.TransactionID);
+                var updateSplitInMongo = _cancelTxnMongo.UpdateSplitTid(splitPnrRequest.OapTransactionGuid, cancelTxnData, res, splitTid);
+                var oapTransactionRs = _oapTransactionRepository.GetByOapTransactionIdAsync(cancelTxnData.OAPTransactionID);
+                var splitTrnxRs = _oapCxlUtility.GetTransactionDetails(splitTid);
+                var paymentLineRs = _cancelTxnMongo.GetRefundDetails(splitPnrRequest.OapTransactionGuid);
+                await Task.WhenAll(createTasksRs, updateSplitInMongo, oapTransactionRs, splitTrnxRs, paymentLineRs);
+                var splitTrnx = await splitTrnxRs;
+                var paymentRs = _invoiceDataAPI.GetPayments(splitTrnx?.TransactionGUID.ToString(), splitTid, userId);
+                var oapTransaction = (await oapTransactionRs)?.FirstOrDefault();
+                oapTransaction.Transactionid = splitTid;
+                oapTransaction.Remarks += $"replaced with split parent {splitPnrRequest.TransactionID}";
+                oapTransaction.UpdatedOn = _oAPUtility.ConvertUtcToEstTime(DateTime.UtcNow);
+                var updateSplitTid = _oapTransactionRepository.UpdateAsync(oapTransaction);
+                await Task.WhenAll(updateSplitTid, paymentRs);
+                var splitPaxNames = string.Join(',', res?.SplittedTransactionIDs?.Find(I => I.IsSplitPNR)?.PaxDetails?.Select(pax => $"{pax?.FirstName} {pax?.LastName}") ?? new[] { "" } );
+                var comment = $"Cancel Transaction migrated to Child TID {splitTid} for pax {splitPaxNames}";
+                var comment2 = string.Join("<br/>", cancelTxnData?.TidComments);
+                await Task.WhenAll(
+                    UpdatePaymentLines(await paymentRs, await paymentLineRs, splitTid, splitPnrRequest.OapTransactionGuid),
+                    _oapCxlUtility.InsertTidComments(splitPnrRequest.TransactionID, userId, comment),
+                    _oapCxlUtility.InsertTidComments(splitTid, userId, comment2)
+                );
+                res.SplitTransactionId = splitTid;
+                res.SplitTransactionGuid = splitTrnx?.TransactionGUID.ToString();
+            }
+            res.IsProceedAllowed = true;
+            _logger.LogInformation("SplitPaxTask : SplitPNR : tid-{splitPnrRequest?.TransactionID}, isSplitSuccess:{res?.IsSuccess} response:{JsonConvert.SerializeObject(res)}", splitPnrRequest?.TransactionID, res?.IsSuccess, JsonConvert.SerializeObject(res));
+            return res;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SplitPaxTask : SplitPNR : tid-{splitPnrRequest?.TransactionID}, Exception:- {ex.Message} , {ex.StackTrace}", splitPnrRequest?.TransactionID, ex.Message, ex.StackTrace);
+            return new SplitPnrResponse() { IsProceedAllowed = false, ErrorInfo = $"Internal server error {ex.StackTrace}" };
+        }
+    }
+
+    private async Task CreateTrxTaskForParent(int userId, int oapTransactionID, int parentTid)
+    {
+        AddOapTxnRequest parentOapTrnx = new()
+        {
+            TransactionID = parentTid,
+            TransactionTypeID = (int)OAPTransactionType.Cancellation,
+            CreatedBy = userId,
+            TransactionStatus = (int)OAPTransactionStatus.COMPLETED,
+            Remarks = "Parent Split booking"
+        };
+        var newParentOapTnxRs = _oapCancelTransactionHelper.CreateOapTransaction(parentOapTrnx, userId);
+        var allTasksRs = _oapCancelTaskHelper.GetByOapTrasnsactionId(oapTransactionID);
+        var newParentOapTnx = await newParentOapTnxRs;
+        var allTasks = await allTasksRs;
+        allTasks.ForEach(task =>
+        {
+            CancellationTaskDetails taskDetail = new()
+            {
+                CallID = task.CallID,
+                OAPTransactionID = newParentOapTnx.OAPTransactionID,
+                OAPTaskTypeID = task.OAPTaskTypeID,
+                TransactionTypeID = (int)OAPTransactionType.Cancellation,
+                CancelTxID = task.OAPTaskID,
+                IsManualTask = task.IsManual,
+                CreatedBy = userId,
+                Status = OAPTransactionStatus.COMPLETED.GetHashCode(),
+                IsAutomatedTask = false,
+                TransactionMappingID = task?.OAPTaskMappingID ?? 0,
+                ParentTaskId = task?.ParentTaskId ?? 0,
+                SubDeptId = task.SubDeptId
+            };
+            _oapCancelTaskHelper.CreateCancellationTask(taskDetail, userId);
         });
-    mockOapTransactionRepository.GetByOapTransactionIdAsync(Arg.Any<int>())
-        .Returns(Task.FromResult(new OapTransaction { Transactionid = 1, Remarks = "" }));
-    mockOapCxlUtility.GetTransactionDetails(Arg.Any<int>())
-        .Returns(Task.FromResult(new TransactionDetails { TransactionGUID = Guid.NewGuid().ToString() }));
-    mockInvoiceDataAPI.GetPayments(Arg.Any<string>(), Arg.Any<int>(), Arg.Any<int>())
-        .Returns(Task.FromResult(new List<BillingPayment>()));
-    mockCancelTxnMongo.GetRefundDetails(Arg.Any<string>())
-        .Returns(new RefundDetails { PaymentLines = new List<RefundPaymentLine>() });
-    mockOAPUtility.ConvertUtcToEstTime(Arg.Any<DateTime>())
-        .Returns(DateTime.UtcNow); // Or a specific mocked DateTime
-
-    // System under test (SplitPNR function)
-    var splitPnrTask = new SplitPnrTask(mockCancelTxnMongo, mockChangeExchangeApi,
-        mockOapTransactionRepository, mockOapCxlUtility, mockInvoiceDataAPI, mockOAPUtility, mockLogger);
-
-    // Act (calling the function)
-    var userId = 10;
-    var splitPnrRequest = new SplitPnrRequest { OapTransactionGuid = "guid", TransactionID = 4 };
-    TestResponse testResponse;
-    try
-    {
-        testResponse = await splitPnrTask.SplitPNR(splitPnrRequest, userId);
-    }
-    catch (Exception ex)
-    {
-        testResponse = new TestResponse { IsSuccess = false, ErrorMessage = ex.Message };
     }
 
-    // Assert (verifying expectations)
-    if (testResponse.IsSuccess)
+    private async Task UpdatePaymentLines(List<BillingPayment> payments, RefundDetails refundDetails, int splitTid, string oapTrxnGuid)
     {
-        // Verify successful split
-        Assert.IsTrue(testResponse.Data.IsSuccess);
-        Assert.AreEqual(3, testResponse.Data.SplitTransactionId);
-        Assert.NotNull(testResponse.Data.SplitTransactionGuid);
-        Assert.Equal("Cancel Transaction migrated to Child TID 3 for pax John Doe", testResponse.Data.Comments);
-
-        // Verify interactions with mocked dependencies (adjust as needed)
-        mockCancelTxnMongo.Received().GetCancelTransactionResponse(Arg.Is(splitPnrRequest.OapTransactionGuid));
-        mockChangeExchangeApi.Received().SplitPNR(Arg.Is(splitPnrRequest), Arg.Is(userId));
-        mockOapTransactionRepository.Received().GetByOapTransactionIdAsync(Arg.Is(1)); // OAPTransactionID from mockCancelTxnMongo
-        mockOapCxlUtility.Received().GetTransactionDetails(Arg.Is(3)); // SplittedTransactionID from mockChangeExchangeApi
-        mockInvoiceDataAPI.Received().GetPayments(Arg.Any<string>(), Arg.Is(3), Arg.Is(userId));
-        mockCancelTxnMongo.Received().GetRefundDetails(Arg.Is(splitPnrRequest.OapTransactionGuid
+        if (refundDetails?.PaymentLines != null)
+        {
+            var paymentIds = new List<int>();
+            refundDetails?.PaymentLines?.ForEach(line =>
+            {
+                if (line?.PaidFor != 0)
+                {
+                    var paymentId = payments?.Find(payment => payment?.Paidfor == (int)line?.PaidFor && !paymentIds.Contains(payment.PaymentId))?.PaymentId ?? 0;
+                    if (paymentId > 0)
+                    {
+                        line.PaymentId = paymentId;
+                        paymentIds.Add(paymentId);
+                        if (line.TransactionId > 0)
+                        {
+                            line.TransactionId = splitTid;
+                        }
+                    }
+                }
+            });
+            await _cancelTxnMongo.UpdatePaymentLineDetails(refundDetails?.PaymentLines, oapTrxnGuid);
+        }
+    }
+}
