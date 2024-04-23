@@ -1,0 +1,6 @@
+useEffect(() => {
+        if (((isCCVStatus && categoryOptions?.find(x => x.value == "CCV Status" )) || (isCCDStatus && categoryOptions?.find(x => x.value == "CCD"))) && !categoryName) {
+            const e = { value: isCCDStatus ? "CCD" : "CCV Status" }
+            onCategoryChange(e);
+        }
+    }, [cancellationCategory?.categoryList])
