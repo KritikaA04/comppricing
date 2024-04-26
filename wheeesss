@@ -1,67 +1,69 @@
-const validateFrom = (req, index) => {
-        if (req?.waiverCodeLocation === null || req?.waiverCodeLocation === "" || ((req?.waiverCode === null || req?.waiverCode === "") && req?.waiverCodeLocation != "OSI") || ((req?.waiverCodeLocation === "OSI and Waiver" || req?.waiverCodeLocation === "OSI") && (req?.osiRemarks === null || req?.osiRemarks === ""))) {
-            if ((req?.waiverCode === null || req?.waiverCode === "") && req?.waiverCodeLocation != "OSI") {
-                updateRequestWaiverObject({ waiverCodeErrorMessage: "WaiverCode Is Required." }, index);
-            }
-            if (req?.waiverCodeLocation === null || req?.waiverCodeLocation === "") {
-                updateRequestWaiverObject({ waiverCodeLocationErrorMessage: "Please select WaiverCodeLocation." }, index);
-            }
-            if ((req?.waiverCodeLocation === "OSI and Waiver" || req?.waiverCodeLocation === "OSI") && (req?.osiRemarks === null || req?.osiRemarks === "")) {
-                updateRequestWaiverObject({ osiRemarksEroorMessage: "Please Update OSI Remarks" }, index);
-            }
-            return false;
-        }
-        return true;
-    }
-
-    const updateRequestWaiverObject = (updatedProperty, index) => {
-        if (waiverMode === 'ticketwise') {
-            updateTicketWiseObject(updatedProperty, index);
+const onRetentionChange = (e) => {
+        if (e.value != '-1') {
+            updateSelectedBookingRecord({
+                cancellationDetails: {
+                    ...cancellationDetails,
+                    validateCancel: false,
+                    retentionOption: e.value,
+                    retentionReasonText: retentionreasonOptions?.find((x) => x.value === e.value)
+                },
+            });
         }
         else {
-            const selectedcode = requestWaiverCodeData[index];
-            const currentBooking = allBookings[activeTab];
-            const updatedTaskObject = update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject[2].object, { $splice: [[index, 1, { ...selectedcode, ...updatedProperty }]] });
-            const updatedSelectedBooking = update(allBookings, {
-                $splice: [[activeTab, 1, {
-                    activeTab: activeTab, ...currentBooking,
-                    CancelTransaction: {
-                        ...currentBooking.CancelTransaction, RequestWaiverCode: {
-                            ...currentBooking.CancelTransaction.RequestWaiverCode,
-                            taskObject: update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject, {
-                                $splice: [[2, 1, {
-                                    objectId: 3,
-                                    objectName: "RequestWaiverCodeDetails",
-                                    object: updatedTaskObject
-                                }]]
-                            })
-                        }
-                    }
-                }]]
+            updateSelectedBookingRecord({
+                cancellationDetails: {
+                    ...cancellationDetails,
+                    validateCancel: false,
+                    retentionOption: undefined,
+                    retentionReasonText: undefined
+                },
             });
-            dispatch(updateSelectedBooking(updatedSelectedBooking));
         }
-    }
-    const updateTicketWiseObject = (updatedProperty, index) => {
-        const selectedcode = ticketWiseData[index];
-        const currentBooking = allBookings[activeTab];
-        const updatedTaskObject = update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject[3].object, { $splice: [[index, 1, { ...selectedcode, ...updatedProperty }]] });
-        const updatedSelectedBooking = update(allBookings, {
-            $splice: [[activeTab, 1, {
-                activeTab: activeTab, ...currentBooking,
-                CancelTransaction: {
-                    ...currentBooking.CancelTransaction, RequestWaiverCode: {
-                        ...currentBooking.CancelTransaction.RequestWaiverCode,
-                        taskObject: update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject, {
-                            $splice: [[3, 1, {
-                                objectId: 20,
-                                objectName: "TicketWiseData",
-                                object: updatedTaskObject
-                            }]]
-                        })
-                    }
+    };
+
+    const onReasonChange = (e) => {
+        setIsLoadingCategories(true);
+        dispatch(
+            getCancellationRetentionReason({ canellationReasonId: e.value },
+                (response) => {
+                    updateSelectedBookingRecord({
+                        cancellationDetails: {
+                            ...cancellationDetails,
+                            validateCancel: false,
+                            cancellationRetentionReason: response?.cancellationRetentionReasonList,
+                            cancellationReasonId: e.value,
+                        },
+                    });
+                    setIsLoadingCategories(false);
+
                 }
-            }]]
-        });
-        dispatch(updateSelectedBooking(updatedSelectedBooking));
-    }
+            )
+        );
+    };
+    const onCategoryChange = (e) => {
+        if (!cancellationDetails.cancellationCategory) {
+            categoryFunction({ ...cancellationDetails })
+        }
+        setIsLoadingCategories(true);
+        const resetDetails = {
+            cancellationWaiverReason: {},
+            cancellationReasonId:""
+        }
+        dispatch(
+            getCancellationReason(
+                { ...cancelDetails, cancellationCategory: e.value },
+                (response) => {
+                    updateSelectedBookingRecord({
+                        cancellationDetails: {
+                            ...cancellationDetails,
+                            ...resetDetails,
+                            cancellationReason: response,
+                            validateCancel: false,
+                            selectedCancelCategory: e.value,
+                        },
+                    });
+                    setIsLoadingCategories(false);
+                }
+            )
+        );
+    };
