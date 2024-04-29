@@ -1,0 +1,109 @@
+function RequestWaiverCode() {
+    const dispatch = useDispatch();
+    const cancelTasks = useSelector(getCancelTasks);
+    const requestWaiverCodeData = useSelector(getRequestWaiverCode);
+    const ticketWiseData = useSelector(getTicketWiseData);
+    const allBookings = useSelector(getAllBookingsData);
+    const activeTab = useSelector(getActiveTabId);
+    const TransactionID = useSelector(getCancelTransactionId);
+    const setTaskLoader = useSelector(getSetTaskLoader);
+    const cancelTransactionGuid = useSelector(getCancelTransactionGuid);
+    const refundDetails = useSelector(getRefundDetails);
+    const isFusionFare = allBookings?.[activeTab]?.CancelTransaction?.refundDetails?.isFusionFare;
+    const [waiverCode, setWaiverCode] = useState([]);
+    const [response, setResponse] = useState();
+    const [isValid, setIsValid] = useState(true);
+    const [isUpdated, setIsUpdated] = useState(false);
+    const [isAlertShouldVisible, setIsAlertShouldVisible] = useState(false);
+    const [isPasted, setIsPasted] = useState(false);
+    const [isAttempted, setIsAttempted] = (requestWaiverCodeData?.find(code => !code?.osiRemarks) && !ticketWiseData) ? useState(false) : useState(true);
+    const [waiverMode, setWaiverMode] = ticketWiseData && requestWaiverCodeData ? useState('airline') : ticketWiseData ? useState('ticketwise') : useState('airline');
+    const [showContinueMessage, setShowContinueMessage] = useState(false);
+    const indexMap = [];
+    if (ticketWiseData) {
+        const tktDataDetials = ticketWiseData?.filter(code => code?.waiverCode === code?.osiRemarks && code?.waiverCode != "");
+        tktDataDetials.forEach((tktData) =>
+            indexMap.push(ticketWiseData?.findIndex((e) => e === tktData))
+        );
+    }
+    // console.log(requestWaiverCodeData);
+    useEffect(() => {
+        if (requestWaiverCodeData || ticketWiseData) {
+            const isAnyOSI = (
+                (waiverMode == 'airline' && requestWaiverCodeData?.find(code => (code?.waiverCodeLocation === 'OSI and Waiver') || (code?.waiverCodeLocation === 'OSI')))
+                || (waiverMode == 'ticketwise' && ticketWiseData?.find(code => (code?.waiverCodeLocation === 'OSI and Waiver') || (code?.waiverCodeLocation === 'OSI')))
+            );
+            isAnyOSI ? setIsAlertShouldVisible(true) : setIsAlertShouldVisible(false);
+        }
+    }, [requestWaiverCodeData, ticketWiseData, waiverMode]);
+
+    if (!cancelTasks || setTaskLoader) {
+        return <Loader />;
+    }
+    const validateFrom = (req, index) => {
+        if (req?.waiverCodeLocation === null || req?.waiverCodeLocation === "" || ((req?.waiverCode === null || req?.waiverCode === "") && req?.waiverCodeLocation != "OSI") || ((req?.waiverCodeLocation === "OSI and Waiver" || req?.waiverCodeLocation === "OSI") && (req?.osiRemarks === null || req?.osiRemarks === ""))) {
+            if ((req?.waiverCode === null || req?.waiverCode === "") && req?.waiverCodeLocation != "OSI") {
+                updateRequestWaiverObject({ waiverCodeErrorMessage: "WaiverCode Is Required." }, index);
+            }
+            if (req?.waiverCodeLocation === null || req?.waiverCodeLocation === "") {
+                updateRequestWaiverObject({ waiverCodeLocationErrorMessage: "Please select WaiverCodeLocation." }, index);
+            }
+            if ((req?.waiverCodeLocation === "OSI and Waiver" || req?.waiverCodeLocation === "OSI") && (req?.osiRemarks === null || req?.osiRemarks === "")) {
+                updateRequestWaiverObject({ osiRemarksEroorMessage: "Please Update OSI Remarks" }, index);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    const updateRequestWaiverObject = (updatedProperty, index) => {
+        if (waiverMode === 'ticketwise') {
+            updateTicketWiseObject(updatedProperty, index);
+        }
+        else {
+            const selectedcode = requestWaiverCodeData[index];
+            const currentBooking = allBookings[activeTab];
+            const updatedTaskObject = update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject[2].object, { $splice: [[index, 1, { ...selectedcode, ...updatedProperty }]] });
+            const updatedSelectedBooking = update(allBookings, {
+                $splice: [[activeTab, 1, {
+                    activeTab: activeTab, ...currentBooking,
+                    CancelTransaction: {
+                        ...currentBooking.CancelTransaction, RequestWaiverCode: {
+                            ...currentBooking.CancelTransaction.RequestWaiverCode,
+                            taskObject: update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject, {
+                                $splice: [[2, 1, {
+                                    objectId: 3,
+                                    objectName: "RequestWaiverCodeDetails",
+                                    object: updatedTaskObject
+                                }]]
+                            })
+                        }
+                    }
+                }]]
+            });
+            dispatch(updateSelectedBooking(updatedSelectedBooking));
+        }
+    }
+    const updateTicketWiseObject = (updatedProperty, index) => {
+        const selectedcode = ticketWiseData[index];
+        const currentBooking = allBookings[activeTab];
+        const updatedTaskObject = update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject[3].object, { $splice: [[index, 1, { ...selectedcode, ...updatedProperty }]] });
+        const updatedSelectedBooking = update(allBookings, {
+            $splice: [[activeTab, 1, {
+                activeTab: activeTab, ...currentBooking,
+                CancelTransaction: {
+                    ...currentBooking.CancelTransaction, RequestWaiverCode: {
+                        ...currentBooking.CancelTransaction.RequestWaiverCode,
+                        taskObject: update(currentBooking.CancelTransaction.RequestWaiverCode.taskObject, {
+                            $splice: [[3, 1, {
+                                objectId: 20,
+                                objectName: "TicketWiseData",
+                                object: updatedTaskObject
+                            }]]
+                        })
+                    }
+                }
+            }]]
+        });
+        dispatch(updateSelectedBooking(updatedSelectedBooking));
+    }
