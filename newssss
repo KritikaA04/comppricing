@@ -1,0 +1,26 @@
+<div className="col-2 text-left text-nowrap pl-3">
+          {/* {passenger.TicketedOn && <>
+                        <strong className="text-dark text-nowrap"> {getDOBFormattedDate(passenger.TicketedOn)} </strong>
+                        <i className="icon ic-info-empty hovertooltips"><div className="stopstolltip couple-tootips" >TKT #{passenger.TicketNumber ? passenger.TicketNumber : "Unable to fetch current ticket"}</div></i>
+                    </>
+                    } */}
+          {ticketDetails?.TicketedOn && (
+            <strong className="text-dark text-nowrap">
+              {getDOBFormattedDate(ticketDetails?.TicketedOn)}{ticketDetails.TicketedOnTimeZoneGDS && `(${ticketDetails.TicketedOnTimeZoneGDS})`}
+            </strong>
+          )}
+          {ticketDetails?.TicketedOn && (
+            <i className="icon ic-info-empty hovertooltips">
+              <div className="stopstolltip couple-tootips">
+                TKT #
+                {ticketDetails?.TicketNumber
+                  ? ticketDetails?.TicketNumber
+                  : "Unable to fetch current ticket"}
+              </div>
+            </i>
+          )}
+        </div>
+
+
+
+ "ticketedOn": "2022-11-18T00:00:00",
