@@ -1,0 +1,7 @@
+export function getDOBFormattedDate(date) {
+  if (!date || date === "0001-01-01T00:00:00") {
+    return;
+  }
+  const dateObj = new Date(date);
+  return `${dateObj.getDate().toString().padStart(2, "0")} ${dateObj.toLocaleString('default', { month: 'short' })},${dateObj.getFullYear()}  ${padLeadingZero(dateObj.getHours())}:${padLeadingZero(dateObj.getMinutes())}:${padLeadingZero(dateObj.getSeconds())} `
+}
