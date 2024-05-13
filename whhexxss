@@ -1,0 +1,94 @@
+useEffect(() => {
+        Iif (((isCCVStatus && categoryOptions?.find(x => (teamName == "cs" && x.value == "CCV Status") || (teamName != "cs" && x.value == "CCV Unconfirmed"))) || (isCCDStatus && categoryOptions?.find(x => (teamName == "cs" && x.value == "CCD") || (teamName != "cs" && x.value == "CCD Unconfirmed")))) && !categoryName) {
+            const ccvCheck = teamName != "cs" ? "CCV Unconfirmed" : "CCV Status"
+            const ccdCheck = teamName != "cs" ? "CCD Unconfirmed" : "CCD"
+            const e = { value: isCCDStatus ? ccdCheck : ccvCheck }
+            onCategoryChange(e);
+        }
+    }, [cancellationCategory?.categoryList])
+ 
+    //const voidingType = cancellationDetails?.voidingTypeSelected;
+    // const cancelDetails = cancellationDetails?.cancelIntentTasksRBResponse;
+    // const voidDetails = !isFusionFare ? (cancelDetails?.voidliblity?.voidabilityDetails?.[0]) : cancelDetails?.voidliblity?.voidabilityDetails?.find((x) => x.transactionID === selectedChild.childTid);
+ 
+    const dispatch = useDispatch();
+    const onRetentionChange = (e) => {
+        if (e.value != '-1') {
+            updateSelectedBookingRecord({
+                cancellationDetails: {
+                    ...cancellationDetails,
+                    validateCancel: false,
+                    retentionOption: e.value,
+                    retentionReasonText: retentionreasonOptions?.find((x) => x.value === e.value)
+                },
+            });
+        }
+        else {
+            updateSelectedBookingRecord({
+                cancellationDetails: {
+                    ...cancellationDetails,
+                    validateCancel: false,
+                    retentionOption: undefined,
+                    retentionReasonText: undefined
+                },
+            });
+        }
+    };
+ 
+    const onReasonChange = (e) => {
+        setIsLoadingCategories(true);
+        const resetDetails = {
+            retentionOption: undefined,
+            cancellationRetentionReason: undefined
+        }
+        dispatch(
+            getCancellationRetentionReason({ canellationReasonId: e.value },
+                (response) => {
+                    updateSelectedBookingRecord({
+                        cancellationDetails: {
+                            ...cancellationDetails,
+                            ...resetDetails,
+                            validateCancel: false,
+                            cancellationRetentionReason: response?.cancellationRetentionReasonList,
+                            cancellationReasonId: e.value,
+                        },
+                    });
+                    setIsLoadingCategories(false);
+ 
+                }
+            )
+        );
+    };
+    const onCategoryChange = (e) => {
+        if (!cancellationDetails.cancellationCategory) {
+            categoryFunction({ ...cancellationDetails })
+        }
+        setIsLoadingCategories(true);
+        dispatch(
+            getCancellationReason(
+                { ...cancelDetails, cancellationCategory: e.value },
+                (response) => {
+                    const object = e.value === "" ? {
+                        cancellationWaiverReason: {},
+                        cancellationReasonId: "",
+                        retentionOption: undefined,
+                        cancellationRetentionReason: undefined
+                    } : {
+                        cancellationReasonId: "",
+                        retentionOption: undefined,
+                        cancellationRetentionReason: undefined
+                    };
+                    updateSelectedBookingRecord({
+                        cancellationDetails: {
+                            ...cancellationDetails,
+                            cancellationReason: response,
+                            validateCancel: false,
+                            selectedCancelCategory: e.value,
+                            ...object,
+                        },
+                    });
+                    setIsLoadingCategories(false);
+                }
+            )
+        );
+    };
