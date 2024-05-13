@@ -1,3 +1,16 @@
+test('validate function returns true', () => {
+
+        const wrapper = render(<AuditQuestions questions={questions} cancelTransactionGuid={"123"} transactionID={"123"} isFusionFare={true} />)
+        fireEvent.click(wrapper.getByTestId("submitAuditQuestions"));
+        const setAuditQuestions = wrapper.getAllByTestId("setAuditQuestion")
+        setAuditQuestions.forEach(element => {
+            fireEvent.click(element);
+        });
+    });
+
+
+
+
 useEffect(() => {
         Iif (((isCCVStatus && categoryOptions?.find(x => (teamName == "cs" && x.value == "CCV Status") || (teamName != "cs" && x.value == "CCV Unconfirmed"))) || (isCCDStatus && categoryOptions?.find(x => (teamName == "cs" && x.value == "CCD") || (teamName != "cs" && x.value == "CCD Unconfirmed")))) && !categoryName) {
             const ccvCheck = teamName != "cs" ? "CCV Unconfirmed" : "CCV Status"
