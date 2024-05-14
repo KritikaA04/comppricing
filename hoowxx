@@ -1,0 +1,18 @@
+public async Task<bool> CheckIsBookingAlreadyCancelled(int transactionId) => await Task.Run(async () =>
+{
+    _logger.LogInformation("CancellationHelper : CheckIsBookingAlreadyCancelled : Method Start () TransactionId : {transactionId}", transactionId);
+    var isAlreadyCancelled = false;
+    try
+    {
+        var cancellationFromSupplier = CheckIsBookingAlreadyCancelledSupplier(transactionId);
+        var cancellationFromOAP = CheckIsBookingAlreadyCancelledOAP(transactionId);
+        await Task.WhenAll(cancellationFromSupplier, cancellationFromOAP);
+        isAlreadyCancelled = OR of the two 
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "CancellationHelper : CheckIsBookingAlreadyCancelled : Exception:- {ex.Message} , {ex.StackTrace}", ex.Message, ex.StackTrace);
+    }
+    _logger.LogInformation("CancellationHelper : CheckIsBookingAlreadyCancelled : Method END () TransactionId : {transactionId}, IsAlreadyCancelled : {isAlreadyCancelled}", transactionId, isAlreadyCancelled);
+    return isAlreadyCancelled;
+});
