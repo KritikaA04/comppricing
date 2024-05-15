@@ -1,0 +1,14 @@
+<div className="form-group row">
+                        <label className="col-sm-8"><strong>Total Refundable</strong> (including tax)</label>
+                        <input className={`form-control  col-sm-3 ml-4 ${(netRefundPayment === '' && isMandFieldEmpty) ? "ddlvalidation" : ""}`} type='number'
+                            placeholder="_ _"
+                            value={netRefundPayment}
+                            onChange={onRefundAmmountChange}
+                            disabled={isDisablePopup}
+                            onKeyPress={(e) => {
+                                if (e.code === 'NumpadSubtract') {
+                                    e.preventDefault();
+                                }
+                            }}
+                        />
+                    </div>
