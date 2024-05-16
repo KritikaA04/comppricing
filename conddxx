@@ -1,0 +1,22 @@
+{(["Flown", "Purged", "Cancelled", "No Show",].includes(pnrStatus)) &&
+        alertBox(<ul className='mb-0'>
+          {/* pick this */}
+          <li>Active flights are not found in the booking by automation.</li>
+          {/* pick this */}
+          <li>If you still want to proceed with cancellation please review the PNR and ticket coupon status before proceeding with Cancellation.</li>
+          {(couponStatusInSCA && isRestricted) ? (<>
+            <li>Automation has identified coupon under No Show/not in OPEN state. Please Call airline to Open coupons, Once Airline OPEN coupons then relaunch Cancel Intent page. </li>
+            <li>If booking is eligible for Refund/Credit as per your findings then Use report error tab to enable manual cancellation</li>
+          </>) :
+            pnrStatus === "No Show" ?
+              <li>Booking is identified as No show. Automation will not allow to proceed with cancellation. If booking is eligible for Refund/Credit as per your findings then Use report error tab to enable manual cancellation.</li> :
+              // pick this
+              (pnrStatus === "Cancelled" && !couponStatusInSCA && !isAnyCopounOpen && isRestricted) ? <li>Booking is identified as cancelled. Automation will not allow to proceed with cancellation. If booking is eligible for Refund/Credit as per your findings then Use report error tab to enable manual cancellation.</li> :
+                (["Flown", "Purged"].includes(pnrStatus) && !couponStatusInSCA && !isAnyCopounOpen && isRestricted) ?
+                  <li>  Booking is identified as already Used by passenger. Automation will not allow to proceed with cancellation. If booking is eligible for Refund/Credit as per your findings then Use report error tab to enable manual cancellation.</li> :
+                  <li>You need to manually cancel the PNR, Automation will start semi automated manual flow.</li>}
+          {/* pick this */}
+          <li>You must update correct PNR status before proceeding by using report error tab.</li>
+
+        </ul>, <span className="text-danger font-weight-bold pl-2 mr-5">Attention!</span>)
+      }
