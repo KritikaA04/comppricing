@@ -1,0 +1,618 @@
+import _ from "lodash";
+export const createCouponDetailsArray = (body) => {
+    let returnArray = []
+    body.cancelIntentTasksRBResponse.objectDetails[0].object.PassengerDetails.forEach((passenger) => {
+        passenger.SegmentDetails.forEach((segment) => {
+            returnArray = [...returnArray, {
+                "paxOrder": passenger.PaxOrder,
+                "ticketNumber": passenger.TicketNumber,
+                "departureAirport": segment.Source,
+                "arrivalAirport": segment.Destination,
+                "segmentOrder": segment.OrderId,
+                "couponStatus": segment.CouponStatus,
+                "isUpdated": segment.isCouponDetailsUpdate
+            }];
+        });
+    });
+    return returnArray;
+};
+export const createPaymentLinesArray = (body, isAlreadyDeducted) => {
+    return body.cancelIntentTasksRBResponse?.updatedPaymentLines?.paymentInfo ? getPaymentLines(body.isAirlineCredit, Object.assign({}, body.cancelIntentTasksRBResponse?.updatedPaymentLines?.paymentInfo), body.isWaiverCodeApplicable, isAlreadyDeducted, body) : getPaymentLines(body.isAirlineCredit, Object.assign({}, body.cancelIntentTasksRBResponse?.objectDetails[2].object), body.isWaiverCodeApplicable, isAlreadyDeducted, body);
+};
+export const getPaymentLines = (isAirlineCredit, paymentLineRows, isWaiverCodeApplicable, isAlreadyDeducted, body) => {
+    const isFusionFare = body.cancelIntentTasksRBResponse?.isFusionFare;
+    let submittedPayLines = _.cloneDeep(paymentLineRows);
+    submittedPayLines.paymentLineInfo.forEach((p) => {
+        p.paymentLines?.forEach((pl) => {
+            pl.submittedAmount = pl.updatedNetAmount
+        });
+    });
+    const paymentInfo = Object.assign({}, submittedPayLines);
+    const isErrorSubmitted = body.isErrorSubmitted;
+    if (isFusionFare) {
+        const childTids = body.cancelIntentTasksRBResponse.childTidInfo;
+        let refunddata = [], fcData = [], commanData = [];
+        childTids?.forEach((child) => {
+            if (child.isAirlineCredit) {
+                refunddata = [...refunddata, ...paymentInfo?.paymentLineInfo[1]?.paymentLines.filter(x => x.transactionId === child.childTid)];
+            } else {
+                const negativePaymentLine = paymentInfo?.paymentLineInfo[0]?.paymentLines.filter(x => (x.title === "Non Refundable Tax" || x.title === "Non Refundable Amt/Tax" || x.title === "Airline Penalty") && x.transactionId === child.childTid);
+                let negativeTotal = 0, Refundlineinfo;
+                negativePaymentLine?.map((item) => {
+                    negativeTotal = negativeTotal + item.updatedNetAmount;
+                });
+                Refundlineinfo = paymentInfo?.paymentLineInfo[0]?.paymentLines?.map((paymentline) => {
+                    if (paymentline.title === "Air Ticket Cost" && (!paymentline.isAutomated || isWaiverCodeApplicable || isErrorSubmitted) && paymentline.transactionId === child.childTid) {
+                        return { ...paymentline, updatedNetAmount: paymentline.updatedNetAmount - negativeTotal };
+                    }
+                    else if (paymentline.transactionId === child.childTid) {
+                        return paymentline;
+                    }
+                });
+                Refundlineinfo = Refundlineinfo.filter((item) => item !== undefined);
+                fcData = [...fcData, ...Refundlineinfo];
+            }
+        });
+        commanData = paymentInfo?.paymentLineInfo[0]?.paymentLines.filter(x => x.transactionId === 0);
+        let combinedArray = [...refunddata, ...fcData, ...commanData];
+        return combinedArray;
+    }
+    let paymentLines;
+    if (isAirlineCredit) {
+        const refundPaymentLineDetails = paymentInfo?.paymentLineInfo?.find(x => x.paymentInfoType === "FutureCreditInfo");
+        paymentLines = refundPaymentLineDetails.paymentLines;
+    } else {
+        const refundPaymentLineDetails = paymentInfo?.paymentLineInfo?.find(x => x.paymentInfoType === "RefundInfo");
+        if (!isAlreadyDeducted) {
+            const partialAutomatedPaymentLines = refundPaymentLineDetails?.paymentLines?.filter((x) => x?.isAutomated != true);
+            const isAirManual = partialAutomatedPaymentLines?.find((x) => x?.title === "Air Ticket Cost");
+            const negativePaymentLine = refundPaymentLineDetails.paymentLines?.filter(x => x.title === "Non Refundable Tax" || x.title === "Non Refundable Amt/Tax" || x.title === "Airline Penalty");
+            let total = 0;
+            negativePaymentLine?.map((item) => {
+                if (item.updatedNetAmount > -1 && (item.isUpdated || (item?.isAutomated && partialAutomatedPaymentLines && isAirManual))) {
+                    total = (total + item.updatedNetAmount);
+                }
+            });
+            paymentLines = refundPaymentLineDetails?.paymentLines?.map((paymentline) => {
+                if (paymentline.title === "Air Ticket Cost" && (!paymentline.isAutomated || isWaiverCodeApplicable || isErrorSubmitted || (total > 0))) {
+                    return { ...paymentline, updatedNetAmount: (paymentline.updatedNetAmount - total)?.toFixed(2) };
+                }
+                else {
+                    return paymentline;
+                }
+            });
+        }
+    }
+    return paymentLines;
+};
+const getPaymentLinesData = (body, PaymentType) => {
+    let paymentLinesData;
+    if (body.cancelIntentTasksRBResponse?.updatedPaymentLines && body.cancelIntentTasksRBResponse?.updatedPaymentLines.paymentInfo) {
+        paymentLinesData = Object.assign({}, body.cancelIntentTasksRBResponse?.updatedPaymentLines?.paymentInfo);
+    } else {
+        paymentLinesData = Object.assign({}, body.cancelIntentTasksRBResponse?.objectDetails[2].object);
+    }
+    const refundPaymentLineDetails = paymentLinesData?.paymentLineInfo?.find(x => x.paymentInfoType === PaymentType);
+    return refundPaymentLineDetails?.paymentLines;
+};
+const createServiceFeeResponseArray = (body) => {
+    const isWithInVoid = body.cancelIntentTasksRBResponse.isVoidable;
+    let cancelServicefeeObject = body.cancelIntentTasksRBResponse.objectDetails[1];
+    const isInvoluntary = body.cancelIntentTasksRBResponse.cancellationType === "Involuntary";
+    let isAirlineCredit = true;
+    if (body.cancelIntentTasksRBResponse.isFusionFare) {
+        body.cancelIntentTasksRBResponse.childTidInfo.forEach(child => {
+            if (!child.isAirlineCredit) {
+                isAirlineCredit = false
+            }
+        })
+    } else {
+        isAirlineCredit = body.isAirlineCredit
+    }
+    let feeLine;
+    if (isWithInVoid) {
+        feeLine = cancelServicefeeObject.object.find(x => x.feeType === 3);
+    } else {
+        feeLine = isAirlineCredit ? cancelServicefeeObject.object.find(x => x.feeType === 2) : cancelServicefeeObject.object.find(x => x.feeType === 1);
+    }
+    return feeLine?.paxWiseServiceFees?.map((pax) => {
+        return {
+            "paxType": pax.paxTypeName,
+            "noofPax": pax.noofPax,
+            "recommendedFee": pax.serviceFee,
+            "updatedFee": isInvoluntary ? 0 : (pax.isUpdated ? pax.updatedServiceFee : pax.serviceFee),
+            "gstAmount": pax?.gstAmount ? pax?.gstAmount : 0,
+            "gstPercentage": pax?.gstPercentage ? pax?.gstPercentage : 0
+        };
+    });
+};
+const createFutureCreditInfo = (body, paymentLines, flowType) => {
+    const cFARRefundInfo = paymentLines?.cFARRefundInfo;
+    let returnArray = [];
+    const isFusionFare = body.cancelIntentTasksRBResponse?.isFusionFare;
+    if (body?.multiValidatingCarrierData) {
+        paymentLines.paymentLineInfo?.forEach((payment) => {
+            if (payment.paymentInfoType === "FutureCreditInfo") {
+                payment.paymentLines.forEach((p) => {
+                    if ((p.title === "Airline Add Collect" || p.header === "Airline Ancillaries" || (p.title === "Air Ticket Cost" && p.paymentMode === "Gift Card")) && p.updatedNetAmount !== 0) {
+                        returnArray = [...returnArray, {
+                            "childTid": p.transactionId,
+                            "creditAmount": p.updatedNetAmount,
+                            "ruleType": p.isAutomated ? "Automated" : "Manual",
+                        }];
+                    }
+                });
+            }
+        });
+        body?.multiValidatingCarrierData.forEach((data) => {
+            returnArray = [...returnArray, {
+                "childTid": body.transactionId,
+                "creditAmount": data.creditAmount,
+                "changePenalty": data.airlinePenalty,
+                "airlineCode": data.validatingCarrier,
+                "reissueBy": data.reIssueByDate,
+                "travelStartBy": data.newStartBy,
+                "airlineCreditExpirationDate": data.creditExpirationDate,
+                "travelExpirationDate": data.newCompleteBy,
+                "isAutomated": false,
+                "dataSources": [],
+                "ruleType": "Manual",
+                "airlineName": data?.airlineName
+            }];
+        });
+    }
+    else if (isFusionFare) {
+        const childTidInfo = body.cancelIntentTasksRBResponse?.childTidInfo;
+        childTidInfo.forEach(child => {
+            if (child.isAirlineCredit === true) {
+                paymentLines.paymentLineInfo?.forEach((payment) => {
+                    if (payment.paymentInfoType === "FutureCreditInfo") {
+                        payment.paymentLines.forEach((p) => {
+                            if (p.title === "Air Ticket Cost" && p.paymentMode !== "Gift Card" && p.updatedNetAmount !== 0) {
+                                const r = returnArray.find(t => t.childTid === p.transactionId);
+                                const travelExpDate = cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.travelExpirationDate;
+                                const finalExp = (travelExpDate === "NaN-NaN-NaN" || !travelExpDate) ? null : travelExpDate;
+                                if (returnArray.length === 0 || r === undefined) {
+                                    returnArray = [...returnArray, {
+                                        "childTid": p.transactionId,
+                                        "creditAmount": p.updatedNetAmount,
+                                        "airlineCode": p.airlineCode,
+                                        "travelExpirationDate": finalExp,
+                                        "airlineCreditExpirationDate": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.creditValidUntil : p.airlineCreditExpirationDate,
+                                        "ruleType": cFARRefundInfo?.isCFAR === true ? "CFAR Credit" : p.isAutomated ? "Automated" : "Manual",
+                                        "changePenalty": p.isAutomated ? 0 : p.airlinepenalty,
+                                        "reissueBy": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.reIssueDate,
+                                        "travelStartBy": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.travelStartDate,
+                                        "isAutomated": p.isAutomated ? p.isAutomated : false,
+                                        "dataSources": body.TravelExpiryInfo?.fareruleInfo?.dataSources ? body.TravelExpiryInfo?.fareruleInfo?.dataSources : [],
+                                    }];
+                                }
+
+                            }
+                            if ((p.title === "Airline Add Collect" || p.header === "Airline Ancillaries" || (p.title === "Air Ticket Cost" && p.paymentMode === "Gift Card")) && p.updatedNetAmount !== 0 && p.transactionId === child.childTid) {
+                                returnArray = [...returnArray, {
+                                    "childTid": p.transactionId,
+                                    "creditAmount": p.updatedNetAmount,
+                                    "ruleType": p.isAutomated ? "Automated" : "Manual",
+                                }];
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+    else {
+        paymentLines.paymentLineInfo?.forEach((payment) => {
+            if (payment.paymentInfoType === "FutureCreditInfo") {
+                payment.paymentLines.forEach((p) => {
+                    if ((p.title === "Air Ticket Cost" && p.paymentMode !== "Gift Card") && p.updatedNetAmount !== 0) {
+                        const travelExpDate = cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.travelExpirationDate;
+                        const finalExp = (travelExpDate === "NaN-NaN-NaN" || !travelExpDate) ? null : travelExpDate;
+                        returnArray = [...returnArray, {
+                            "childTid": body.transactionID,
+                            "creditAmount": p.updatedNetAmount,
+                            "airlineCode": p.airlineCode,
+                            "travelExpirationDate": finalExp,
+                            "airlineCreditExpirationDate": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.creditValidUntil : p.airlineCreditExpirationDate,
+                            "ruleType": cFARRefundInfo?.isCFAR === true ? "CFAR Credit" : p.isAutomated ? "Automated" : "Manual",
+                            "changePenalty": (p.isAutomated && !p.airlinepenalty) ? 0 : p.airlinepenalty,
+                            "reissueBy": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.reIssueDate,
+                            "travelStartBy": cFARRefundInfo?.isCFAR === true ? cFARRefundInfo?.travelExpirationDate : p.travelStartDate,
+                            "isAutomated": p.isAutomated ? p.isAutomated : false,
+                            "dataSources": body?.TravelExpiryInfo?.fareruleInfo?.dataSources ? body?.TravelExpiryInfo?.fareruleInfo?.dataSources : [],
+                        }];
+                    }
+
+                    if ((p.title === "Airline Add Collect" || p.header === "Airline Ancillaries" || (p.title === "Air Ticket Cost" && p.paymentMode === "Gift Card")) && p.updatedNetAmount !== 0) {
+                        returnArray = [...returnArray, {
+                            "childTid": p.transactionId,
+                            "creditAmount": p.updatedNetAmount,
+                            "ruleType": p.isAutomated ? "Automated" : "Manual",
+                        }];
+                    }
+                });
+            }
+        });
+    }
+    const tID = body.transactionID;
+    if (returnArray.length > 0) {
+        const futureCreditInfo = {
+            "transactionId": tID,
+            "flowType": flowType,
+            "futureCreditBasicInfos": [...returnArray]
+        };
+        return futureCreditInfo;
+    } else {
+        return null;
+    }
+};
+const findNextStepSelected = (body) => {
+    let returnElement;
+    body.cancelIntentTasksRBResponse.taskDetailsList.taskDetails[4].instruction.forEach((inst) => {
+        if (inst.selected === true) {
+            returnElement = inst.desc;
+        }
+    });
+    return returnElement;
+};
+const getcFARData = (body) => {
+    let paymentLinesData;
+    if (body.cancelIntentTasksRBResponse?.updatedPaymentLines && body.cancelIntentTasksRBResponse?.updatedPaymentLines.paymentInfo) {
+        paymentLinesData = Object.assign({}, body.cancelIntentTasksRBResponse?.updatedPaymentLines?.paymentInfo);
+    } else {
+        paymentLinesData = Object.assign({}, body.cancelIntentTasksRBResponse?.objectDetails[2].object);
+    }
+    return paymentLinesData.cFARRefundInfo;
+}
+
+const getNetRefundAmount = (body) => {
+    const isFusionFare = body.cancelIntentTasksRBResponse?.isFusionFare;
+    const childTidInfo = body.cancelIntentTasksRBResponse?.childTidInfo;
+    let total = 0;
+    let refundPaymentLineDetails = getPaymentLinesData(body, "RefundInfo");
+    if (refundPaymentLineDetails) {
+        refundPaymentLineDetails?.map((item) => {
+            if (isFusionFare) {
+                let childAirlineCredit = true;
+                childTidInfo?.forEach(child => {
+                    if (child.childTid === item.transactionId) {
+                        childAirlineCredit = child.isAirlineCredit;
+                    }
+                })
+                if (!childAirlineCredit || item.transactionId === 0) {
+                    if (item.paymentMode === "Credit Card") {
+                        if (item.updatedNetAmount >= 0 || exchangeRequestType !== "Voluntary") {
+                            total = total + item.updatedNetAmount;
+                        } else {
+                            total = total + item.refundableAmount;
+                        }
+                    }
+                }
+            }
+            else {
+                if (!body.isAirlineCredit && item.paymentMode === "Credit Card") {
+                    if (item.updatedNetAmount >= 0 || exchangeRequestType !== "Voluntary") {
+                        total = total + item.updatedNetAmount;
+                    } else {
+                        total = total + item.refundableAmount;
+                    }
+                }
+            }
+        });
+        let furureCreditPaymentLines = getPaymentLinesData(body, "FutureCreditInfo");
+        const cFARRefundInfo = getcFARData(body);
+        if (!isFusionFare && body?.isAirlineCredit) {
+            furureCreditPaymentLines?.map((item) => {
+                if (item.header === 'Attachments' || item.header === 'Booking Service Fee') {
+                    if (item.updatedNetAmount >= 0) {
+                        total = total + item.updatedNetAmount + item.cfarRefundCashAmount;
+                    } else {
+                        total = total + item.refundableAmount + item.cfarRefundCashAmount;
+                    }
+                }
+            });
+
+            if (cFARRefundInfo?.isCfarInBooking) {
+                if (cFARRefundInfo != null && cFARRefundInfo.refundCashAmount != null) {
+                    total = total + parseFloat(cFARRefundInfo?.refundCashAmount);
+                }
+            }
+        }
+
+        const negativePaymentLine = refundPaymentLineDetails?.filter(
+            (x) =>
+                x.title === "Non Refundable Tax" || x.title === "Non Refundable Amt/Tax" || x.title === "Airline Penalty"
+        );
+        negativePaymentLine?.map((item) => {
+            if (isFusionFare) {
+                let childAirlineCredit = true;
+                childTidInfo?.forEach(child => {
+                    if (child.childTid === item.transactionId) {
+                        childAirlineCredit = child.isAirlineCredit;
+                    }
+                })
+                if (!childAirlineCredit) {
+                    if (item.updatedNetAmount >= 0 && item.isUpdated) {
+                        total = total - item.updatedNetAmount;
+                    } else {
+                        total = total - item.refundableAmount;
+                    }
+                }
+            } else {
+                if (!body.isAirlineCredit) {
+                    if (item.updatedNetAmount >= 0 && item.isUpdated) {
+                        total = total - item.updatedNetAmount;
+                    } else {
+                        total = total - item.refundableAmount;
+                    }
+                }
+            }
+
+        });
+
+
+        return total === 0 ? "0.00" : total?.toFixed(2);
+    }
+
+    return "0.00";
+};
+
+const getTotalCancelFee = (body, isPartialRefund) => {
+    if (body.isBookingPartiallyCancelledFromOap) {
+        return 0;
+    }
+
+    const isWithInVoid = body.cancelIntentTasksRBResponse.isVoidable;
+    let cancelServicefeeObject = body.cancelIntentTasksRBResponse.objectDetails[1];
+    let passangers = body.cancelIntentTasksRBResponse.objectDetails[0];
+    let numberOfPaxSelected = {};
+    passangers?.object?.PassengerDetails?.forEach((x) => {
+        if (x.isChecked) {
+            if (numberOfPaxSelected[x.PaxType]) {
+                numberOfPaxSelected[x.PaxType]++
+            } else {
+                numberOfPaxSelected[x.PaxType] = 1;
+            }
+        }
+    })
+    let feeLine;
+    if (isWithInVoid) {
+        feeLine = cancelServicefeeObject.object.find(x => x.feeType === 3);
+    } else {
+
+        feeLine = body.isBothAirlineCredit ? cancelServicefeeObject.object.find(x => x.feeType === 2) : cancelServicefeeObject.object.find(x => x.feeType === 1);
+    }
+    if (!feeLine || !feeLine.paxWiseServiceFees) {
+        return 0;
+    }
+    const totalFee = feeLine?.paxWiseServiceFees?.map(item => item.updatedServiceFee >= 0 ? (item.updatedServiceFee + parseFloat(item.gstAmount)) * (isPartialRefund ? item.noofPax : (numberOfPaxSelected[item.paxTypeName] ? numberOfPaxSelected[item.paxTypeName] : 0)) : (item.serviceFee + parseFloat(item.gstAmount)) * (isPartialRefund ? item.noofPax : (numberOfPaxSelected[item.paxTypeName] ? numberOfPaxSelected[item.paxTypeName] : 0))).reduce((prev, next) => prev + next);
+    return totalFee;
+};
+const getPaymentLineInfo = (body) => {
+    if (body.cancelIntentTasksRBResponse?.updatedPaymentLines && body.cancelIntentTasksRBResponse?.updatedPaymentLines.paymentInfo) {
+        return body.cancelIntentTasksRBResponse?.updatedPaymentLines.paymentInfo;
+    } else {
+        return body.cancelIntentTasksRBResponse.objectDetails[2].object;
+    }
+};
+const getAirlineCreditTotal = (body) => {
+    const isFusionFare = body.cancelIntentTasksRBResponse?.isFusionFare;
+    let refundPaymentLineDetails = getPaymentLinesData(body, "FutureCreditInfo");
+    const childTidInfo = body.cancelIntentTasksRBResponse?.childTidInfo;
+
+    let total = 0;
+    if (!isFusionFare) {
+        if (!body?.isAirlineCredit) {
+            return "0.00";
+        }
+        if (refundPaymentLineDetails) {
+            total = refundPaymentLineDetails?.map(
+                (item) => (item.title === "Air Ticket Cost" || item.title === "Airline Add Collect" || item.header === "Airline Ancillaries") && item.updatedNetAmount
+            ).reduce((prev, next) => prev + next);
+            return total?.toFixed(2);
+        }
+    } else {
+        childTidInfo.forEach(child => {
+            if (child.isAirlineCredit === true) {
+                total = total + refundPaymentLineDetails?.map(
+                    (item) => (item.title === "Air Ticket Cost" && item.transactionId === child.childTid) && item.updatedNetAmount
+                ).reduce((prev, next) => prev + next);
+            }
+        });
+
+        if (total === 0) {
+            return "0.00";
+        }
+        return total?.toFixed(2);
+    }
+    if (isFusionFare) {
+        const totalRefund = refundPaymentLineDetails?.map(item => item.title === "Air Ticket Cost" && item.updatedNetAmount).reduce((prev, next) => prev + next);
+        return totalRefund?.toFixed(2);
+    } else {
+        if (body.isAirlineCredit) {
+            const totalAirlineCredit = refundPaymentLineDetails?.map(item => item.title === "Air Ticket Cost" && item.updatedNetAmount).reduce((prev, next) => prev + next);
+            return totalAirlineCredit?.toFixed(2);
+        }
+        return "0.00";
+    }
+};
+
+const getChildTidInfo = (body) => {
+    const { childTidForPartialRefund, isPartialRefund } = body;
+    const childTidInfo = body?.cancelIntentTasksRBResponse?.childTidInfo;
+    if (isPartialRefund && childTidInfo && childTidForPartialRefund?.length > 0) {
+        const childTxInfo = childTidInfo.filter(function (x) {
+            return (childTidForPartialRefund.includes(x.childTid));
+        });
+        return childTxInfo;
+    } else {
+        return childTidInfo;
+    }
+};
+
+const getUniqueWaiverCodes = (refundEligibilityDetails, body) => {
+    const waiverArray = [];
+    const refundRS = refundEligibilityDetails?.find((x) => x.transactionId === body.transactionID && x.isInformationCorrect != false)?.refundRS;
+    refundRS?.forEach((rfs) => {
+        waiverArray.push(rfs?.refundRule?.waiverInfo);
+    });
+    if (waiverArray.filter((x) => x === waiverArray[0]).length === waiverArray.length) {
+        //all same ie single unique waivercode
+        return waiverArray[0];
+    }
+    return waiverArray;
+}
+
+const uniqueOsiCodes = (refundEligibilityDetails, body) => {
+    const waiverArray = [];
+    const refundRS = refundEligibilityDetails?.find((x) => x.transactionId === body.transactionID && x.isInformationCorrect != false)?.refundRS;
+    refundRS?.forEach((rfs) => {
+        waiverArray.push(rfs?.refundRule?.scheduleChangeOsi);
+    });
+    if (waiverArray.length >= 1) {
+        return (waiverArray.filter((x) => x === waiverArray[0]).length === waiverArray.length);
+    }
+    return true;
+}
+
+export const nextStepRequestCreation = (body) => {
+    const isCouponDetailsUpdate = body.cancelIntentTasksRBResponse && body.cancelIntentTasksRBResponse.objectDetails[0].object.isCouponDetailsUpdate ? body.cancelIntentTasksRBResponse.objectDetails[0].object.isCouponDetailsUpdate : false;
+    const couponDetails = createCouponDetailsArray(body);
+    const paymentLines = createPaymentLinesArray(Object.assign({}, body), false);
+    const serviceFeeResponse = createServiceFeeResponseArray(Object.assign({}, body));
+    let passengerDetails = body.cancelIntentTasksRBResponse ? body.cancelIntentTasksRBResponse.objectDetails[0].object : {};
+    const nextStepSelected = findNextStepSelected(Object.assign({}, body));
+    const airlineCredit = getAirlineCreditTotal(body);
+
+    let cancellationReasonName;
+    if (body.cancellationReason && body.cancellationReason.cancellationReasonList) {
+        body.cancellationReason.cancellationReasonList.forEach((ele, index) => {
+            if (body.cancellationReasonId !== undefined && (parseInt(body.cancellationReasonId) === ele.reasonId)) {
+                cancellationReasonName = ele.cancelReason;
+            }
+        });
+    }
+    let cancelwaiverreasonname;
+    if (body.cancellationWaiverReason && body.cancellationWaiverReason.cancellationWaiverReasonList) {
+        body.cancellationWaiverReason.cancellationWaiverReasonList.forEach((waiver, index) => {
+            if (body.waiverReasonID !== undefined && (body.waiverReasonID === waiver.waiverId)) {
+                cancelwaiverreasonname = waiver.cancelWaiverReason;
+            }
+        });
+    }
+    const { isSplitRefunds, isPartialRefund, isPriorityRefund } = body;
+    if (passengerDetails && (isSplitRefunds || isPartialRefund)) {
+        passengerDetails = getPartialRefundPaxDetails({ passengerDetails, isPartialRefund, childTidForPartialRefund: body.childTidForPartialRefund, isFusionFare: body.cancelIntentTasksRBResponse.isFusionFare });
+    }
+
+    // const isInvoluntary = body.cancelIntentTasksRBResponse.cancellationType === "Involuntary";
+    const serviceFeeInfo = body.cancelIntentTasksRBResponse?.objectDetails[1]?.object[0];
+    const preCancel = body.cancelIntentTasksRBResponse?.objectDetails[2]?.object?.paymentInfo?.preCancelInfo;
+    const paymentLineInfo = getPaymentLineInfo(Object.assign({}, body));
+    const atcTicketInfoForPaymentLine = body.cancelIntentTasksRBResponse.objectDetails[2].object.paymentInfo?.atcTicketInfoForPaymentLine;
+    const futureCreditInfo = createFutureCreditInfo(body, paymentLineInfo, body.cancelIntentTasksRBResponse.flowType);
+    const totalNetRefundAmount = getNetRefundAmount(Object.assign({}, body));
+    const currency = body.cancelIntentTasksRBResponse?.currency;
+    const ddfInfo = paymentLineInfo?.ddfInfo;
+    const supplier = body.cancelIntentTasksRBResponse?.supplier;
+    const waiverCode = (body.cancelIntentTasksRBResponse?.refundEligibilityDetails?.find((x) => x.transactionId === body.transactionID && x.isInformationCorrect != false)?.refundRS[0]?.refundRule?.waiverInfo != null) ? getUniqueWaiverCodes(body.cancelIntentTasksRBResponse?.refundEligibilityDetails, body) : "";
+    const cfarData = getcFARData(body);
+    const uniqueOsi = uniqueOsiCodes(body.cancelIntentTasksRBResponse?.refundEligibilityDetails, body);
+    const automatedReissueDate = body?.TravelExpiryInfo?.isAutomated ? body?.TravelExpiryInfo?.isTicketWiseDetailsAvailable ? body?.TravelExpiryInfo?.fareruleInfo?.automatedReissueDate : body?.TravelExpiryInfo?.automatedReissueDate : null;
+    const isReIssueEdited = body?.TravelExpiryInfo?.isTicketWiseDetailsAvailable ? body?.TravelExpiryInfo?.fareruleInfo?.isReIssueEdited : body?.TravelExpiryInfo?.isReIssueEdited;
+    const IsMBCalculatedAsManual = paymentLines?.some((x) => x.paidFor == "MAINBOOKING" && x?.refundableAmount != x?.updatedNetAmount);
+    const data = {
+        "cancelTransGUID": body.cancelTransactionGuid,
+        "transactionID": body.transactionID,
+        "cancelTransID": body.cancelTransactionID,
+        "callID": body.callID,
+        "ruleID": body.cancelIntentTasksRBResponse.ruleId,
+        "oapTransactionID": body.oapTransactionID,
+        "nextStepSelected": nextStepSelected ? nextStepSelected : '',
+        "isRefundFlow": !body.isAirlineCredit,
+        "isCouponDetailsUpdate": isCouponDetailsUpdate,
+        "cancellationCategory": body.selectedCancelCategory,
+        "cancellationReasonID": body.cancellationReasonId,
+        "cancellationReason": cancellationReasonName,
+        "retentionReasonID": body?.retentionOption,
+        "retentionReasonText": body?.retentionReasonText?.label,
+        "waiverReasonID": body.waiverReasonID ? body.waiverReasonID : 0,
+        "waiverReason": body.selectedWaiverReason ? cancelwaiverreasonname : '',
+        "isFutureCreditEligibility": body.cancelIntentTasksRBResponse.isFutureCreditEligibility,
+        "isRefundEligibility": body.cancelIntentTasksRBResponse.isRefundEligibility,
+        "isPartialCancel": isPartialRefund,
+        "netRefundAmount": totalNetRefundAmount,
+        "validatingCarrier": body.cancelIntentTasksRBResponse.validatingCarrier,
+        "validatingCarrierName": body.cancelIntentTasksRBResponse.validatingCarrierName,
+        "couponDetails": couponDetails,
+        "paymentLines": paymentLines,
+        "serviceFeeResponse": serviceFeeResponse,
+        "passengerDetails": passengerDetails,
+        "cancelOapTasks": body.cancelOapTasks,
+        "paymentLineCalculationSource": body.cancelIntentTasksRBResponse.paymentLineCalculationSource,
+        "isInhibitedAirline": body.cancelIntentTasksRBResponse.isInhibitedAirline,
+        "isFutureCreditAirline": body.cancelIntentTasksRBResponse.isFutureCreditAirline,
+        "createdBy": -10824,
+        "emailId": body.cancelIntentTasksRBResponse.email,
+        "airlineCredit": airlineCredit,
+        "points": (body?.points === undefined) ? 0 : body?.points,
+        "totalCancellationFee": body?.isFeeDiscounted && body?.discountedCancellationFee ? parseFloat(body?.discountedCancellationFee) : getTotalCancelFee(body, isPartialRefund),
+        "isScheduleChangeBooking": body.cancelIntentTasksRBResponse.isScheduleChangeBooking,
+        "scheduleChangeStatus": body.cancelIntentTasksRBResponse.scheduleChangeStatus,
+        "scheduleChangeType": body.cancelIntentTasksRBResponse.scheduleChangeType,
+        "cancellationType": body.cancelIntentTasksRBResponse.cancellationType,
+        "pnr": body.cancelIntentTasksRBResponse.pnr,
+        "pnrStatus": body.cancelIntentTasksRBResponse?.pnrStatus,
+        "PNRStatusName": body.cancelIntentTasksRBResponse.pnrStatusName,
+        "isWaiverCodeApplicable": body?.isWaiverCodeApplicable === undefined ? false : body?.isWaiverCodeApplicable,
+        "waiverCodeApplicableFor": body?.waiverCodeApplicableFor === undefined ? null : body.waiverCodeApplicableFor,
+        "flowType": body.cancelIntentTasksRBResponse.flowType,
+        "isFusionFare": body.cancelIntentTasksRBResponse.isFusionFare,
+        "engineIdDesc": body.cancelIntentTasksRBResponse.engineIdDesc,
+        "engineId": body.cancelIntentTasksRBResponse.engineId,
+        "isSuperSaver": body.cancelIntentTasksRBResponse?.isSuperSaver,
+        "isBasicEconomy": body.cancelIntentTasksRBResponse?.isBasicEconomy,
+        "isSplitPNR": body.cancelIntentTasksRBResponse?.isSplitPNR,
+        "isCrossSell": body.cancelIntentTasksRBResponse?.isCrossSell,
+        "isComplexAirline": body.cancelIntentTasksRBResponse?.isComplexAirline,
+        "childTidInfo": body.cancelIntentTasksRBResponse.isFusionFare ? getChildTidInfo(body) : null,
+        "isVoidable": body.cancelIntentTasksRBResponse.isVoidable,
+        "isSplitCancel": isSplitRefunds,
+        "supplierFee": serviceFeeInfo?.supplierFee,
+        "isBookingPartiallyCancelledFromOap": body.isBookingPartiallyCancelledFromOap,
+        "partialPaymentChildTransactionDetail": paymentLineInfo?.childTransactionDetail,
+        "ticketInfoForPaymentLine": paymentLineInfo?.ticketInfoForPaymentLine,
+        "isMultiTicket": body.cancelIntentTasksRBResponse?.isMultiTicket,
+        "futureCreditInfo": futureCreditInfo,
+        "refundEligibility": body?.RefundEligibility === undefined ? null : body.RefundEligibility,
+        "isRetentionOffered": body.retentionOption === "true" ? true : false,
+        "isAutomationCalculated": body?.isAutomationCalculated === false ? false : true,
+        "trackingReferenceKey": body.cancelIntentTasksRBResponse?.trackingReferenceKey,
+        "ticketIssueDate": body.cancelIntentTasksRBResponse?.ticketIssueDate,
+        "atcTicketInfoForPaymentLine": atcTicketInfoForPaymentLine,
+        "isPriorityRefund": isPriorityRefund,
+        "cFARRefundInfo": cfarData === undefined ? null : cfarData,
+        "preCancelInfo": preCancel ? preCancel : '',
+        "currency": currency ? currency : '',
+        "ddfInfo": ddfInfo ? ddfInfo : {},
+        "portalID": body.cancelIntentTasksRBResponse?.portalID ? body.cancelIntentTasksRBResponse?.portalID : 0,
+        "isTicketNotIssue": body.cancelIntentTasksRBResponse?.isTicketNotIssue ? body.cancelIntentTasksRBResponse?.isTicketNotIssue : false,
+        "waiverCodeDetails": body.cancelIntentTasksRBResponse?.refundEligibilityDetails,
+        "ticketWiseData": (body?.ticketWiseData === undefined) ? null : body?.ticketWiseData,
+        "uniqueWaiverCode": (typeof waiverCode === "string"),
+        "uniqueOsiCode": uniqueOsi,
+        "supplier": supplier,
+        "bookedOn": body.cancelIntentTasksRBResponse?.bookedOn,
+        "isVoidUpdate": body?.isVoidUpdate ? body.isVoidUpdate : false,
+        "isCancelTypeUpdated": body?.cancelIntentTasksRBResponse?.isCancelTypeChanged ? body?.cancelIntentTasksRBResponse?.isCancelTypeChanged : false,
+        "automatedReissueDate": automatedReissueDate || null,
+        "isReIssueEdited": isReIssueEdited || null,
+        "sstNotOptedReason": (body?.AgentAssistanceReason && nextStepSelected === "Cancel on Customer's behalf") ? body?.AgentAssistanceReason : "",
+        "isSstAllowed": body?.isSSTAllowed ? true : false,
+        "SstNotAllowReason": body?.SstNotAllowReason ? body?.SstNotAllowReason : "",
+        "PaymentMethod": body?.cancelIntentTasksRBResponse?.updatedPaymentLines?.paymentInfo?.paymentMethod,
+        "IsMBCalculatedAsManual": IsMBCalculatedAsManual ?? false
+    };
+    return data;
+}
