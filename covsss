@@ -1,0 +1,248 @@
+import _ from "lodash";
+import { createCouponDetailsArray, createPaymentLinesArray, getPaymentLines, createServiceFeeResponseArray, createFutureCreditInfo } from './functions';
+
+// Sample test data
+const sampleBody = {
+  cancelIntentTasksRBResponse: {
+    objectDetails: [
+      { object: { PassengerDetails: [{ PaxOrder: 1, TicketNumber: "123456", SegmentDetails: [{ Source: "JFK", Destination: "LAX", OrderId: 1, CouponStatus: "OK", isCouponDetailsUpdate: true }] }] } },
+      { object: [{ feeType: 1, paxWiseServiceFees: [{ paxTypeName: "ADT", noofPax: 1, serviceFee: 100, isUpdated: true, updatedServiceFee: 90 }] }] },
+      { object: { paymentLineInfo: [{ paymentInfoType: "RefundInfo", paymentLines: [{ title: "Air Ticket Cost", transactionId: 1, updatedNetAmount: 200, isAutomated: false, isUpdated: true }, { title: "Non Refundable Tax", transactionId: 1, updatedNetAmount: -50, isAutomated: false, isUpdated: true }] }] } },
+    ],
+    updatedPaymentLines: {
+      paymentInfo: { paymentLineInfo: [{ paymentInfoType: "RefundInfo", paymentLines: [{ title: "Air Ticket Cost", transactionId: 1, updatedNetAmount: 200, isAutomated: false, isUpdated: true }, { title: "Non Refundable Tax", transactionId: 1, updatedNetAmount: -50, isAutomated: false, isUpdated: true }] }] },
+    },
+    isFusionFare: false,
+    isVoidable: true,
+    cancellationType: "Voluntary",
+    childTidInfo: [{ isAirlineCredit: true, childTid: 1 }],
+  },
+  isAirlineCredit: true,
+  isWaiverCodeApplicable: false,
+  isErrorSubmitted: false,
+  transactionID: 1,
+  TravelExpiryInfo: { fareruleInfo: { dataSources: [] } },
+  multiValidatingCarrierData: [],
+};
+
+// Tests for createCouponDetailsArray
+describe('createCouponDetailsArray', () => {
+  test('should create an array of coupon details', () => {
+    const result = createCouponDetailsArray(sampleBody);
+    expect(result).toEqual([
+      {
+        paxOrder: 1,
+        ticketNumber: "123456",
+        departureAirport: "JFK",
+        arrivalAirport: "LAX",
+        segmentOrder: 1,
+        couponStatus: "OK",
+        isUpdated: true,
+      }
+    ]);
+  });
+});
+
+// Tests for createPaymentLinesArray
+describe('createPaymentLinesArray', () => {
+  test('should create payment lines array using updated payment info', () => {
+    const result = createPaymentLinesArray(sampleBody, false);
+    expect(result).toEqual([
+      { title: "Air Ticket Cost", transactionId: 1, updatedNetAmount: 200, isAutomated: false, isUpdated: true },
+      { title: "Non Refundable Tax", transactionId: 1, updatedNetAmount: -50, isAutomated: false, isUpdated: true },
+    ]);
+  });
+});
+
+// Tests for getPaymentLines
+describe('getPaymentLines', () => {
+  test('should get payment lines', () => {
+    const paymentInfo = sampleBody.cancelIntentTasksRBResponse.updatedPaymentLines.paymentInfo;
+    const result = getPaymentLines(true, paymentInfo, false, false, sampleBody);
+    expect(result).toEqual(paymentInfo.paymentLineInfo[0].paymentLines);
+  });
+});
+
+// Tests for createServiceFeeResponseArray
+describe('createServiceFeeResponseArray', () => {
+  test('should create an array of service fee response', () => {
+    const result = createServiceFeeResponseArray(sampleBody);
+    expect(result).toEqual([
+      {
+        paxType: "ADT",
+        noofPax: 1,
+        recommendedFee: 100,
+        updatedFee: 90,
+        gstAmount: 0,
+        gstPercentage: 0,
+      }
+    ]);
+  });
+});
+
+// Tests for createFutureCreditInfo
+describe('createFutureCreditInfo', () => {
+  test('should create future credit info', () => {
+    const paymentLines = { paymentLineInfo: [{ paymentInfoType: "FutureCreditInfo", paymentLines: [{ title: "Air Ticket Cost", transactionId: 1, updatedNetAmount: 200, isAutomated: false }] }] };
+    const result = createFutureCreditInfo(sampleBody, paymentLines, "SomeFlowType");
+    expect(result).toEqual({
+      transactionId: 1,
+      flowType: "SomeFlowType",
+      futureCreditBasicInfos: [
+        {
+          childTid: 1,
+          creditAmount: 200,
+          airlineCode: undefined,
+          travelExpirationDate: null,
+          airlineCreditExpirationDate: undefined,
+          ruleType: "Manual",
+          changePenalty: undefined,
+          reissueBy: undefined,
+          travelStartBy: undefined,
+          isAutomated: false,
+          dataSources: [],
+        }
+      ]
+    });
+  });
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Import the function and necessary dependencies
+import { nextStepRequestCreation } from './path_to_your_module';
+
+describe('nextStepRequestCreation', () => {
+
+  let body;
+
+  beforeEach(() => {
+    body = {
+      cancelIntentTasksRBResponse: {
+        objectDetails: [
+          { object: { isCouponDetailsUpdate: true, PassengerDetails: [] } },
+          { object: [] },
+          { object: { paymentInfo: { preCancelInfo: {} } } }
+        ],
+        isFusionFare: false,
+        childTidInfo: [],
+        refundEligibilityDetails: [],
+        isVoidable: true,
+        isFutureCreditEligibility: true,
+        isRefundEligibility: true,
+        validatingCarrier: 'ABC',
+        validatingCarrierName: 'Carrier ABC',
+        flowType: 'type1',
+        isSuperSaver: false,
+        isBasicEconomy: false,
+        isSplitPNR: false,
+        isCrossSell: false,
+        isComplexAirline: false,
+        isMultiTicket: false,
+        currency: 'USD',
+        supplier: 'Supplier X',
+        email: 'email@example.com',
+        bookedOn: '2024-01-01',
+        pnr: 'PNR123',
+        pnrStatus: 'CONFIRMED',
+        pnrStatusName: 'Confirmed',
+        trackingReferenceKey: 'TRK123',
+        ticketIssueDate: '2024-01-01',
+        engineIdDesc: 'Engine X',
+        engineId: 1
+      },
+      cancellationReason: {
+        cancellationReasonList: [{ reasonId: 1, cancelReason: 'Reason 1' }]
+      },
+      cancellationReasonId: 1,
+      waiverReasonID: 1,
+      cancellationWaiverReason: {
+        cancellationWaiverReasonList: [{ waiverId: 1, cancelWaiverReason: 'Waiver 1' }]
+      },
+      selectedCancelCategory: 'Category 1',
+      retentionOption: 'Option 1',
+      retentionReasonText: { label: 'Retention Text' },
+      points: 100,
+      isFeeDiscounted: false,
+      discountedCancellationFee: 50.00,
+      isBookingPartiallyCancelledFromOap: false,
+      cancelTransactionGuid: 'GUID123',
+      transactionID: 'TID123',
+      cancelTransactionID: 'CTID123',
+      callID: 'CALL123',
+      oapTransactionID: 'OAP123',
+      cancelOapTasks: {},
+      isWaiverCodeApplicable: true,
+      waiverCodeApplicableFor: 'Some reason',
+      isPriorityRefund: false,
+      RefundEligibility: null,
+      isAutomationCalculated: true,
+      TravelExpiryInfo: {
+        isAutomated: true,
+        isTicketWiseDetailsAvailable: true,
+        fareruleInfo: { automatedReissueDate: '2024-01-01', isReIssueEdited: true }
+      },
+      isVoidUpdate: false,
+      ticketWiseData: null,
+      AgentAssistanceReason: 'Some reason',
+      isSSTAllowed: true,
+      SstNotAllowReason: 'Some reason',
+    };
+  });
+
+  test('should return correct data structure', () => {
+    const result = nextStepRequestCreation(body);
+
+    expect(result).toHaveProperty('cancelTransGUID', 'GUID123');
+    expect(result).toHaveProperty('transactionID', 'TID123');
+    expect(result).toHaveProperty('cancellationReason', 'Reason 1');
+    expect(result).toHaveProperty('waiverReason', 'Waiver 1');
+    expect(result).toHaveProperty('validatingCarrier', 'ABC');
+    expect(result).toHaveProperty('currency', 'USD');
+    expect(result).toHaveProperty('supplier', 'Supplier X');
+  });
+
+  test('should handle default values correctly', () => {
+    delete body.cancellationReasonId;
+    delete body.waiverReasonID;
+
+    const result = nextStepRequestCreation(body);
+
+    expect(result.cancellationReasonID).toBeUndefined();
+    expect(result.waiverReasonID).toBe(0);
+  });
+
+  test('should handle isFeeDiscounted and discountedCancellationFee correctly', () => {
+    body.isFeeDiscounted = true;
+    body.discountedCancellationFee = '100.00';
+
+    const result = nextStepRequestCreation(body);
+
+    expect(result.totalCancellationFee).toBe(100.00);
+  });
+
+  test('should handle null and undefined values correctly', () => {
+    body.cancelIntentTasksRBResponse.validatingCarrierName = null;
+
+    const result = nextStepRequestCreation(body);
+
+    expect(result.validatingCarrierName).toBeUndefined();
+  });
+
+  // Add more tests for other properties and scenarios...
+});
+
