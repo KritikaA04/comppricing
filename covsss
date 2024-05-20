@@ -246,3 +246,216 @@ describe('nextStepRequestCreation', () => {
   // Add more tests for other properties and scenarios...
 });
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// test.js
+
+import _ from 'lodash';
+import {
+  createCouponDetailsArray,
+  createPaymentLinesArray,
+  getPaymentLines,
+  createServiceFeeResponseArray,
+  createFutureCreditInfo
+} from './yourModule';
+
+describe('createCouponDetailsArray', () => {
+  test('should create an array of coupon details', () => {
+    const body = {
+      cancelIntentTasksRBResponse: {
+        objectDetails: [
+          {
+            object: {
+              PassengerDetails: [
+                {
+                  PaxOrder: 1,
+                  TicketNumber: '1234567890',
+                  SegmentDetails: [
+                    {
+                      Source: 'JFK',
+                      Destination: 'LAX',
+                      OrderId: 1,
+                      CouponStatus: 'Active',
+                      isCouponDetailsUpdate: true
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
+    
+    const expectedOutput = [
+      {
+        paxOrder: 1,
+        ticketNumber: '1234567890',
+        departureAirport: 'JFK',
+        arrivalAirport: 'LAX',
+        segmentOrder: 1,
+        couponStatus: 'Active',
+        isUpdated: true
+      }
+    ];
+    
+    expect(createCouponDetailsArray(body)).toEqual(expectedOutput);
+  });
+});
+
+describe('createPaymentLinesArray', () => {
+  test('should create payment lines array', () => {
+    const body = {
+      cancelIntentTasksRBResponse: {
+        updatedPaymentLines: {
+          paymentInfo: {
+            paymentLineInfo: []
+          }
+        },
+        objectDetails: [
+          {}, {}, { object: {} }
+        ]
+      },
+      isAirlineCredit: true,
+      isWaiverCodeApplicable: false
+    };
+    
+    const isAlreadyDeducted = false;
+    const paymentLines = createPaymentLinesArray(body, isAlreadyDeducted);
+    
+    expect(paymentLines).toBeDefined();
+  });
+});
+
+describe('getPaymentLines', () => {
+  test('should get payment lines based on conditions', () => {
+    const body = {
+      cancelIntentTasksRBResponse: {
+        isFusionFare: true,
+        childTidInfo: [
+          { isAirlineCredit: true, childTid: 1 },
+          { isAirlineCredit: false, childTid: 2 }
+        ]
+      },
+      isErrorSubmitted: false,
+      isWaiverCodeApplicable: false
+    };
+    
+    const paymentLineRows = {
+      paymentLineInfo: [
+        {
+          paymentInfoType: 'FutureCreditInfo',
+          paymentLines: [
+            { transactionId: 1, title: 'Air Ticket Cost', updatedNetAmount: 100, isAutomated: false },
+            { transactionId: 2, title: 'Non Refundable Tax', updatedNetAmount: 20 }
+          ]
+        }
+      ]
+    };
+    
+    const isAlreadyDeducted = false;
+    const paymentLines = getPaymentLines(true, paymentLineRows, false, isAlreadyDeducted, body);
+    
+    expect(paymentLines).toBeDefined();
+  });
+});
+
+describe('createServiceFeeResponseArray', () => {
+  test('should create service fee response array', () => {
+    const body = {
+      cancelIntentTasksRBResponse: {
+        isVoidable: true,
+        objectDetails: [
+          {}, 
+          {
+            object: [
+              { feeType: 3, paxWiseServiceFees: [{ paxTypeName: 'Adult', noofPax: 1, serviceFee: 50, isUpdated: false, gstAmount: 5, gstPercentage: 10 }] }
+            ]
+          }
+        ],
+        cancellationType: 'Involuntary',
+        isFusionFare: false
+      },
+      isAirlineCredit: true
+    };
+    
+    const expectedOutput = [
+      {
+        paxType: 'Adult',
+        noofPax: 1,
+        recommendedFee: 50,
+        updatedFee: 0,
+        gstAmount: 5,
+        gstPercentage: 10
+      }
+    ];
+    
+    expect(createServiceFeeResponseArray(body)).toEqual(expectedOutput);
+  });
+});
+
+describe('createFutureCreditInfo', () => {
+  test('should create future credit info array', () => {
+    const body = {
+      cancelIntentTasksRBResponse: {
+        isFusionFare: false,
+        childTidInfo: []
+      },
+      transactionID: 123,
+      TravelExpiryInfo: { fareruleInfo: { dataSources: [] } }
+    };
+    
+    const paymentLines = {
+      paymentLineInfo: [
+        {
+          paymentInfoType: 'FutureCreditInfo',
+          paymentLines: [
+            { transactionId: 123, title: 'Air Ticket Cost', updatedNetAmount: 100, airlineCode: 'AA', travelExpirationDate: '2025-01-01', airlineCreditExpirationDate: '2025-01-01', isAutomated: true, airlinepenalty: 0, reIssueDate: '2025-01-01', travelStartDate: '2025-01-01' }
+          ]
+        }
+      ]
+    };
+    
+    const flowType = 'Refund';
+    
+    const expectedOutput = {
+      transactionId: 123,
+      flowType: 'Refund',
+      futureCreditBasicInfos: [
+        {
+          childTid: 123,
+          creditAmount: 100,
+          airlineCode: 'AA',
+          travelExpirationDate: '2025-01-01',
+          airlineCreditExpirationDate: '2025-01-01',
+          ruleType: 'Automated',
+          changePenalty: 0,
+          reissueBy: '2025-01-01',
+          travelStartBy: '2025-01-01',
+          isAutomated: true,
+          dataSources: []
+        }
+      ]
+    };
+    
+    expect(createFutureCreditInfo(body, paymentLines, flowType)).toEqual(expectedOutput);
+  });
+});
+
